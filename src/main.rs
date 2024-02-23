@@ -1,45 +1,47 @@
+use ::config::ConfigError;
 use clap::Parser;
-use log::{debug, SetLoggerError};
-use simplelog::{ColorChoice, Config, LevelFilter, TermLogger, TerminalMode};
+use log::debug;
+use simplelog::{ColorChoice, LevelFilter, TermLogger, TerminalMode};
 
 use crate::cli::Cli;
+use crate::options::{Command, Options};
 
 mod cli;
+mod config;
+mod options;
+
 mod command;
 mod links;
 
-fn main() -> Result<(), SetLoggerError> {
+fn main() -> Result<(), ConfigError> {
     let cli = Cli::parse();
+    let config = crate::config::Config::new()?;
+    let options = Options::new(&cli, &config);
 
-    let log_level = match cli.verbose {
+    let log_level = match options.verbose {
         true => LevelFilter::Debug,
         false => LevelFilter::Info,
     };
 
     let _ = TermLogger::init(
         log_level,
-        Config::default(),
+        simplelog::Config::default(),
         TerminalMode::Mixed,
         ColorChoice::Auto,
     );
 
-    debug!("{:?}", cli);
+    debug!("{:?}", options);
 
-    let target = cli.target.unwrap_or("~".into());
-
-    match cli.command {
-        cli::Command::Link {
-            ref packages,
-            adopt,
-        } => {
-            command::link(packages, &target, cli.dotfiles, adopt);
+    match options.command {
+        Command::Link => {
+            command::link(&options);
         }
-        cli::Command::Unlink { ref packages } => {
-            command::unlink(packages, &target, cli.dotfiles);
+        Command::Unlink => {
+            command::unlink(&options);
         }
-        cli::Command::Relink { ref packages } => {
-            command::unlink(packages, &target, cli.dotfiles);
-            command::link(packages, &target, cli.dotfiles, false);
+        Command::Relink => {
+            command::unlink(&options);
+            command::link(&options);
         }
     };
 

@@ -2,31 +2,34 @@ use std::fs::{create_dir_all, remove_dir, remove_file};
 use std::os::unix::fs::symlink;
 use std::path::{Path, PathBuf};
 
-use log::{info, debug, error};
+use log::{debug, error, info};
 use walkdir::WalkDir;
 
 use crate::links::Link;
+use crate::options::Options;
 
 #[allow(unused_variables)]
-pub fn unlink<P>(packages: &[PathBuf], target: P, dotfiles: bool) -> Vec<Result<(), ()>>
-where
-    P: AsRef<Path>,
-{
-    packages
+pub fn unlink(options: &Options) -> Vec<Result<(), ()>> {
+    options
+        .packages
         .iter()
         .map(|package| {
             info!("Processing package {:?}", package);
-            if let Ok(links) = get_uninstall_paths(package, target.as_ref(), dotfiles) {
+            if let Ok(links) =
+                get_uninstall_paths::<_, &Path>(package, options.target.as_ref(), options.dotfiles)
+            {
                 for link in links {
                     debug!("{:?}", link);
+                    debug!("[TODO] Unwrapping read_link");
                     if link.source.is_dir() {
                         if link.source.read_dir().unwrap().next().is_none() {
                             info!("Directory {:?} is empty, removing...", link.source);
                             let res = remove_dir(link.source);
                             debug!("remove_dir result {:?}", res);
                         }
-                    }
-                    else if link.source.is_symlink() && link.source.read_link().unwrap() == link.target {
+                    } else if link.source.is_symlink()
+                        && link.source.read_link().unwrap() == link.target
+                    {
                         info!("Removing link: {:?} -> {:?}", link.source, link.target);
                         let res = remove_file(link.source);
                         debug!("remove_file result {:?}", res);
@@ -45,15 +48,15 @@ where
         .collect()
 }
 
-pub fn link<P>(packages: &[PathBuf], target: P, dotfiles: bool, adopt: bool) -> Vec<Result<(), ()>>
-where
-    P: AsRef<Path>,
-{
-    packages
+pub fn link(options: &Options) -> Vec<Result<(), ()>> {
+    options
+        .packages
         .iter()
         .map(|package| {
             info!("Processing package {:?}", package);
-            if let Ok(links) = get_install_paths(package, target.as_ref(), dotfiles) {
+            if let Ok(links) =
+                get_install_paths::<_, &Path>(package, options.target.as_ref(), options.dotfiles)
+            {
                 for link in links {
                     if link.target.is_dir() {
                         if !link.source.exists() {
@@ -69,7 +72,7 @@ where
                                 && link.source.read_link().unwrap() == link.target
                             {
                                 info!("Link {:?} already exists!", link.source)
-                            } else if adopt {
+                            } else if options.adopt {
                                 todo!("Implement adopt");
                             } else {
                                 error!("Item already exists at link location! {:?}", link.source);
