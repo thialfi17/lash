@@ -6,7 +6,7 @@ use anyhow::Result;
 use log::{debug, error, info};
 use walkdir::WalkDir;
 
-use crate::links::Link;
+use crate::link::Link;
 use crate::options::Options;
 
 pub fn unlink(options: &Options) -> Vec<Result<()>> {

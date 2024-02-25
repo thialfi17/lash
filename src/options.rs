@@ -84,8 +84,8 @@ impl From<&crate::config::Config> for MaybeOptions {
     }
 }
 
-impl From<&crate::Cli> for MaybeOptions {
-    fn from(value: &crate::Cli) -> Self {
+impl From<&crate::cli::Cli> for MaybeOptions {
+    fn from(value: &crate::cli::Cli) -> Self {
         let adopt = match value.command {
             crate::cli::Command::Link { adopt, .. } => Some(adopt),
             _ => None,

@@ -14,7 +14,7 @@ mod config;
 mod options;
 
 mod command;
-mod links;
+mod link;
 
 enum Error {
     Config(ConfigError),
