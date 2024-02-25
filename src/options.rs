@@ -1,4 +1,6 @@
-use std::path::PathBuf;
+use std::{env::VarError, path::PathBuf};
+
+use shellexpand::LookupError;
 
 #[derive(Debug)]
 pub enum Command {
@@ -30,32 +32,40 @@ struct MaybeOptions {
 }
 
 impl Options {
-    pub fn new(cli: &crate::cli::Cli, config: &crate::config::Config) -> Self {
+    pub fn new(
+        cli: &crate::cli::Cli,
+        config: &crate::config::Config,
+    ) -> Result<Self, LookupError<VarError>> {
         let cli_options: MaybeOptions = cli.into();
         let config_options: MaybeOptions = config.into();
 
         Self::merge(cli_options, config_options)
     }
 
-    fn merge(cli: MaybeOptions, config: MaybeOptions) -> Self {
+    fn merge(cli: MaybeOptions, config: MaybeOptions) -> Result<Self, LookupError<VarError>> {
         let dotfiles = config.dotfiles.unwrap_or(false) | cli.dotfiles.unwrap_or(false);
         let verbose = config.verbose.unwrap_or(false) | cli.verbose.unwrap_or(false);
         let adopt = config.adopt.unwrap_or(false) | cli.adopt.unwrap_or(false);
 
+        let mut raw_target = cli.target.or(config.target);
+        let raw_target =
+            raw_target.get_or_insert(dirs::home_dir().expect("Could not get home dir!"));
+        let target = shellexpand::full(
+            raw_target
+                .to_str()
+                .expect("Target couldn't be converted to a str. Is it UTF-8?"),
+        )?;
+
         unsafe {
-            Self {
+            Ok(Self {
                 dotfiles,
                 dry_run: cli.dry_run.unwrap_unchecked(),
                 verbose,
-                target: cli
-                    .target
-                    .or(config.target)
-                    .get_or_insert(dirs::home_dir().expect("Could not get home dir!"))
-                    .to_path_buf(),
+                target: target.into_owned().into(),
                 command: cli.command.unwrap_unchecked(),
                 adopt,
                 packages: cli.packages.unwrap_unchecked(),
-            }
+            })
         }
     }
 }

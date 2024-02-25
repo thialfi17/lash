@@ -18,7 +18,7 @@ impl Config {
         global_conf.push("lash");
 
         let mut builder =
-            config::Config::builder().add_source(File::with_name("lash"));
+            config::Config::builder().add_source(File::with_name("lash").required(false));
 
         if let Some(path) = global_conf.to_str() {
             builder = builder.add_source(File::with_name(path).required(false));
