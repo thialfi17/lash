@@ -2,6 +2,7 @@ use std::fs::{create_dir_all, remove_dir, remove_file};
 use std::os::unix::fs::symlink;
 use std::path::{Path, PathBuf};
 
+use anyhow::Result;
 use log::{debug, error, info};
 use walkdir::WalkDir;
 
@@ -9,7 +10,7 @@ use crate::links::Link;
 use crate::options::Options;
 
 #[allow(unused_variables)]
-pub fn unlink(options: &Options) -> Vec<Result<(), ()>> {
+pub fn unlink(options: &Options) -> Vec<Result<()>> {
     options
         .packages
         .iter()
@@ -40,11 +41,10 @@ pub fn unlink(options: &Options) -> Vec<Result<(), ()>> {
                     }
                 }
             } else {
-                error!(
+                anyhow::bail!(
                     "Ran into an error generating the link data for package {:?}",
                     package
                 );
-                return Err(());
             }
             info!("Done processing package {:?}", package);
             Ok(())
@@ -52,7 +52,7 @@ pub fn unlink(options: &Options) -> Vec<Result<(), ()>> {
         .collect()
 }
 
-pub fn link(options: &Options) -> Vec<Result<(), ()>> {
+pub fn link(options: &Options) -> Vec<Result<()>> {
     options
         .packages
         .iter()
@@ -93,11 +93,10 @@ pub fn link(options: &Options) -> Vec<Result<(), ()>> {
                     }
                 }
             } else {
-                error!(
+                anyhow::bail!(
                     "Ran into an error generating the link data for package {:?}",
                     package
                 );
-                return Err(());
             }
             info!("Done processing package {:?}", package);
             Ok(())
