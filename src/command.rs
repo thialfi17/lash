@@ -1,21 +1,13 @@
-use std::fs::{create_dir_all, remove_dir, remove_file};
+use std::fs::{copy, create_dir_all, remove_dir, remove_file, rename};
 use std::os::unix::fs::symlink;
 use std::path::{Path, PathBuf};
 
-use anyhow::Result;
+use anyhow::{anyhow, bail, Result};
 use log::{debug, error, info};
 use walkdir::WalkDir;
 
 use crate::link::Link;
-use crate::options::Options;
-
-pub fn unlink(options: &Options) -> Vec<Result<()>> {
-    map_packages(options, do_unlink)
-}
-
-pub fn link(options: &Options) -> Vec<Result<()>> {
-    map_packages(options, do_link)
-}
+use crate::options::{Command, Options};
 
 /// Performs the actions for a given [Link] when uninstalling a package.
 ///
@@ -39,7 +31,6 @@ fn do_unlink(options: &Options, link: &Link) -> Result<()> {
     Ok(())
 }
 
-
 /// Performs the actions for a given [Link] when installing a package.
 ///
 /// The actions taken vary depending on if the [Link] source is a directory or if the target exists
@@ -57,9 +48,33 @@ fn do_link(options: &Options, link: &Link) -> Result<()> {
         info!("Processing link: {:?} -> {:?}", link.target, link.source);
         if link.target.exists() {
             if link.target.is_symlink() && link.target.read_link()? == link.source {
-                info!("Link {:?} already exists!", link.target)
+                info!("Link {:?} already exists!", link.target);
             } else if options.adopt {
-                todo!("Implement adopt");
+                info!("Found a file at {:?}, adopting...", link.target);
+                debug!("Should I add a confirm/noconfirm option?");
+
+                if !options.dry_run {
+                    let res = rename(link.target.as_path(), link.source.as_path());
+                    debug!("rename result {:?}", res);
+
+                    if res.is_err() {
+                        let res = copy(link.target.as_path(), link.source.as_path());
+                        debug!("copy result {:?}", res);
+
+                        if res.is_ok() {
+                            let res = remove_file(link.target.as_path());
+                            debug!("remove_file result {:?}", res);
+                        } else {
+                            bail!("Failed to adopt file");
+                        }
+                    }
+                }
+
+                debug!("Making link {:?} -> {:?}", link.target, link.source);
+                if !options.dry_run {
+                    let res = symlink(link.source.as_path(), link.target.as_path());
+                    debug!("symlink result {:?}", res);
+                }
             } else {
                 error!("Item already exists at link location! {:?}", link.target);
             }
@@ -74,13 +89,13 @@ fn do_link(options: &Options, link: &Link) -> Result<()> {
     Ok(())
 }
 
-/// Run function `f` on each of the packages provided. This function performs the generic
-/// processing for each package that is independent of if the package is being
-/// installed/uninstalled.
-fn map_packages<F>(options: &Options, f: F) -> Vec<Result<()>>
-where
-    F: Fn(&Options, &Link) -> Result<()>,
+fn package_error<E>(package: &Path, err: E) -> (PathBuf, anyhow::Error) 
+    where E: Into<anyhow::Error>
 {
+    (package.to_owned(), err.into())
+}
+
+pub fn process_packages(options: &Options) -> Vec<core::result::Result<PathBuf, (PathBuf, anyhow::Error)>> {
     options
         .packages
         .iter()
@@ -88,35 +103,45 @@ where
             info!("Processing package {:?}", package);
 
             // Perform shell expansion on destination name/path
-            let target: PathBuf = shellexpand::full(options.target.to_str().ok_or(
-                anyhow::anyhow!("Could not convert source to str for processing"),
-            )?)?
+            let target: PathBuf = shellexpand::full(
+                options
+                    .target
+                    .to_str()
+                    .ok_or(anyhow!("Could not convert source to str for processing")).map_err(|err| package_error(package, err))?,
+            ).map_err(|err| package_error(package, err))?
             .into_owned()
             .into();
 
-            let links = get_paths(package, &target, options.dotfiles, false)?;
+            let uninstall = match options.command {
+                Command::Link => true,
+                Command::Unlink => false,
+            };
+
+            let links = get_paths(package, &target, options.dotfiles, uninstall).map_err(|err| package_error(package, err))?;
+
+            let f = match options.command {
+                Command::Link => do_link,
+                Command::Unlink => do_unlink,
+            };
 
             for link in links {
-                f(options, &link)?;
+                f(options, &link).map_err(|err| package_error(package, err))?;
             }
 
             info!("Done processing package {:?}", package);
-            Ok(())
+            Ok(package.to_owned())
         })
         .collect()
 }
 
 /// Convert "dot-" in a [`Path`] to "."
-fn map_path_dots<P>(path: P) -> PathBuf
+fn map_path_dots<P>(path: P) -> Result<PathBuf>
 where
     P: AsRef<Path>,
 {
-    log::warn!("TODO not handling failing to_str() conversion correctly!");
-    let path = match path.as_ref().to_str() {
-        Some(str) => str.replace("dot-", "."),
-        None => panic!("Couldn't convert path to str"),
-    };
-    PathBuf::from(path)
+    let str = path.as_ref().to_str().ok_or(anyhow!("Could not convert path to str"))?;
+    let path = str.replace("dot-", ".");
+    Ok(PathBuf::from(path))
 }
 
 /// Get all of the [`Link`]s for a package. A [`Link`] is generated for each file or directory
@@ -129,11 +154,15 @@ where
 /// instead of directories then files.
 ///
 /// `map_dots` calls [map_path_dots] on each of the target files/directories.
-fn get_paths(package: &PathBuf, target: &PathBuf, map_dots: bool, uninstall: bool) -> Result<Vec<Link>>
-{
+fn get_paths(
+    package: &Path,
+    target: &Path,
+    map_dots: bool,
+    uninstall: bool,
+) -> Result<Vec<Link>> {
     let mut links = Vec::new();
 
-    for res in WalkDir::new(package.as_path())
+    for res in WalkDir::new(package)
         .min_depth(1)
         .contents_first(uninstall)
         .into_iter()
@@ -145,12 +174,11 @@ fn get_paths(package: &PathBuf, target: &PathBuf, map_dots: bool, uninstall: boo
 
                 // Remove the current dir from the path
                 let path = comp.strip_prefix(package)?;
-                log::debug!("Stripped path is {:?}", path);
 
                 // Get path to link origin
-                let raw_target = target.as_path().join(path);
+                let raw_target = target.join(path);
                 let mapped_target = match map_dots {
-                    true => map_path_dots(raw_target),
+                    true => map_path_dots(raw_target)?,
                     false => raw_target,
                 };
 

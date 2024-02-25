@@ -1,6 +1,11 @@
-use std::{env::VarError, path::PathBuf};
+use std::borrow::Borrow;
+use std::path::PathBuf;
 
-use shellexpand::LookupError;
+use anyhow::Result;
+use clap::Parser;
+
+use crate::cli::Cli;
+use crate::config::Config;
 
 #[derive(Debug)]
 pub enum Command {
@@ -8,8 +13,6 @@ pub enum Command {
     Link,
     /// Remove packages
     Unlink,
-    /// Remove and re-install packages
-    Relink,
 }
 
 #[derive(Debug)]
@@ -48,19 +51,19 @@ struct MaybeOptions {
 }
 
 impl Options {
-    pub fn new(
-        cli: &crate::cli::Cli,
-        config: &crate::config::Config,
-    ) -> Result<Self, LookupError<VarError>> {
-        let cli_options: MaybeOptions = cli.into();
-        let config_options: MaybeOptions = config.into();
+    /// Parse the CLI flags and attempt to read the configuration files.
+    ///
+    /// Merges the outputs to generate the options that the command should be ran with.
+    pub fn new() -> Result<Self> {
+        let cli_options: MaybeOptions = Cli::parse().borrow().into();
+        let config_options: MaybeOptions = Config::new()?.borrow().into();
 
         Self::merge(cli_options, config_options)
     }
 
     /// Merge the options from the command line and the configuration files. All of the potential
     /// options need to have a value.
-    fn merge(cli: MaybeOptions, config: MaybeOptions) -> Result<Self, LookupError<VarError>> {
+    fn merge(cli: MaybeOptions, config: MaybeOptions) -> Result<Self> {
         let dotfiles = config.dotfiles.unwrap_or(false) | cli.dotfiles.unwrap_or(false);
         let verbose = config.verbose.unwrap_or(false) | cli.verbose.unwrap_or(false);
         let adopt = config.adopt.unwrap_or(false) | cli.adopt.unwrap_or(false);
@@ -90,10 +93,10 @@ impl Options {
     }
 }
 
-impl From<&crate::config::Config> for MaybeOptions {
+impl From<&Config> for MaybeOptions {
     /// Some options are not settable in the config files such as dry_run, command and packages.
     /// These can never be `Some`.
-    fn from(value: &crate::config::Config) -> Self {
+    fn from(value: &Config) -> Self {
         Self {
             dotfiles: value.dotfiles,
             dry_run: None,
@@ -118,13 +121,11 @@ impl From<&crate::cli::Cli> for MaybeOptions {
         let packages = match value.command {
             crate::cli::Command::Link { ref packages, .. } => Some(packages.clone()),
             crate::cli::Command::Unlink { ref packages } => Some(packages.clone()),
-            crate::cli::Command::Relink { ref packages } => Some(packages.clone()),
         };
 
         let command = match value.command {
             crate::cli::Command::Link { .. } => Command::Link,
             crate::cli::Command::Unlink { .. } => Command::Unlink,
-            crate::cli::Command::Relink { .. } => Command::Relink,
         };
 
         Self {

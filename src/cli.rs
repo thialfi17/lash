@@ -49,11 +49,4 @@ pub enum Command {
         #[arg(name = "PACKAGES")]
         packages: Vec<PathBuf>,
     },
-
-    /// Remove and re-install packages
-    #[command(arg_required_else_help = true)]
-    Relink {
-        #[arg(name = "PACKAGES")]
-        packages: Vec<PathBuf>,
-    },
 }

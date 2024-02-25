@@ -39,24 +39,19 @@
 //! patches!).
 
 use anyhow::Result;
-use clap::Parser;
 use log::debug;
 use simplelog::{ColorChoice, LevelFilter, TermLogger, TerminalMode};
 
-use crate::cli::Cli;
-use crate::options::{Command, Options};
+use crate::options::Options;
 
 mod cli;
+mod command;
 mod config;
+mod link;
 mod options;
 
-mod command;
-mod link;
-
 fn main() -> Result<()> {
-    let cli = Cli::parse();
-    let config = crate::config::Config::new()?;
-    let options = Options::new(&cli, &config)?;
+    let options = Options::new()?;
 
     let log_level = match options.verbose {
         true => LevelFilter::Debug,
@@ -70,24 +65,14 @@ fn main() -> Result<()> {
         ColorChoice::Auto,
     );
 
-    if options.adopt {
-        anyhow::bail!("--adopt hasn't been implemented yet!");
-    }
-
     debug!("{:?}", options);
 
-    match options.command {
-        Command::Link => {
-            command::link(&options);
+    for res in command::process_packages(&options) {
+        match res {
+            Ok(p) => debug!("Successfully processed package {:?}", p),
+            Err((p, e)) => debug!("Failed to process package {:?} due to: {}", p, e),
         }
-        Command::Unlink => {
-            command::unlink(&options);
-        }
-        Command::Relink => {
-            command::unlink(&options);
-            command::link(&options);
-        }
-    };
+    }
 
     Ok(())
 }
