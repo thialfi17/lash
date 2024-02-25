@@ -17,6 +17,9 @@ pub fn link(options: &Options) -> Vec<Result<()>> {
     map_packages(options, do_link)
 }
 
+/// Performs the actions for a given [Link] when uninstalling a package.
+///
+/// The actions taken vary depending on if the [Link] target is a directory or a symlink.
 fn do_unlink(options: &Options, link: &Link) -> Result<()> {
     if link.target.is_dir() {
         if link.target.read_dir()?.next().is_none() {
@@ -36,6 +39,11 @@ fn do_unlink(options: &Options, link: &Link) -> Result<()> {
     Ok(())
 }
 
+
+/// Performs the actions for a given [Link] when installing a package.
+///
+/// The actions taken vary depending on if the [Link] source is a directory or if the target exists
+/// or is a symlink.
 fn do_link(options: &Options, link: &Link) -> Result<()> {
     if link.source.is_dir() {
         if !link.target.exists() {
@@ -66,6 +74,9 @@ fn do_link(options: &Options, link: &Link) -> Result<()> {
     Ok(())
 }
 
+/// Run function `f` on each of the packages provided. This function performs the generic
+/// processing for each package that is independent of if the package is being
+/// installed/uninstalled.
 fn map_packages<F>(options: &Options, f: F) -> Vec<Result<()>>
 where
     F: Fn(&Options, &Link) -> Result<()>,
@@ -95,7 +106,7 @@ where
         .collect()
 }
 
-/// Convert "dot-" in [`Path`]s to "."
+/// Convert "dot-" in a [`Path`] to "."
 fn map_path_dots<P>(path: P) -> PathBuf
 where
     P: AsRef<Path>,
@@ -108,6 +119,16 @@ where
     PathBuf::from(path)
 }
 
+/// Get all of the [`Link`]s for a package. A [`Link`] is generated for each file or directory
+/// mapping it to the install location inside the `target` directory on the file system.
+///
+/// Either all of the [`Link`]s are generated or an `Err` is generated if making one of the
+/// [`Link`]s fails.
+///
+/// `uninstall` causes the [`Link`]s to be generated in the reverse order (files then directories)
+/// instead of directories then files.
+///
+/// `map_dots` calls [map_path_dots] on each of the target files/directories.
 fn get_paths(package: &PathBuf, target: &PathBuf, map_dots: bool, uninstall: bool) -> Result<Vec<Link>>
 {
     let mut links = Vec::new();

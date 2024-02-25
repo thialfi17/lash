@@ -4,6 +4,9 @@ use config::{ConfigError, File};
 use dirs::config_dir;
 use serde_derive::Deserialize;
 
+/// This struct is what defines which options are supported in the TOML configuration files.
+///
+/// All of the options are optional.
 #[derive(Debug, Deserialize)]
 pub struct Config {
     pub verbose: Option<bool>,
@@ -13,6 +16,8 @@ pub struct Config {
 }
 
 impl Config {
+    /// Attempts to read the configuration from the user's configuration directory or if not
+    /// found/set `~/.config/`. Then attempts to read configuration from the current directory.
     pub fn new() -> Result<Self, ConfigError> {
         let mut global_conf: PathBuf = config_dir().expect("~/.config/");
         global_conf.push("lash");

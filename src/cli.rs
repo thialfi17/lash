@@ -5,6 +5,7 @@ use std::path::PathBuf;
 #[derive(Parser, Debug)]
 #[command(version, about, long_about = None)]
 #[command(arg_required_else_help = true)]
+/// This is the struct that the command line arguments are built from.
 pub struct Cli {
     /// Map "dot-" at start of directory names in source directory to "." in target names.
     #[arg(long)]
@@ -23,6 +24,7 @@ pub struct Cli {
     pub target: Option<PathBuf>,
 
     #[command(subcommand)]
+    /// The selected command
     pub command: Command,
 }
 
@@ -32,7 +34,10 @@ pub enum Command {
     #[command(arg_required_else_help = true)]
     Link {
         #[arg(name = "PACKAGES")]
+        /// Packages to install
         packages: Vec<PathBuf>,
+        /// "Adopt" files already existing on the file system into the package. This is done by
+        /// replacing the source file with the existing file. The link is still created as normal.
         #[arg(long)]
         adopt: bool,
     },
@@ -40,6 +45,7 @@ pub enum Command {
     /// Remove packages
     #[command(arg_required_else_help = true)]
     Unlink {
+        /// Packages to remove
         #[arg(name = "PACKAGES")]
         packages: Vec<PathBuf>,
     },
