@@ -33,6 +33,28 @@ fn link_all_options_long() {
 }
 
 #[test]
+fn link_all_options_short() {
+    let package = assert_fs::TempDir::new().unwrap();
+    let output = assert_fs::TempDir::new().unwrap();
+
+    Command::cargo_bin(env!("CARGO_PKG_NAME"))
+        .unwrap()
+        .args(&[
+            "-n",
+            "-v",
+            "-t",
+            output.to_str().unwrap(),
+            "link",
+            package.to_str().unwrap(),
+        ])
+        .assert()
+        .success();
+
+    package.close().unwrap();
+    output.close().unwrap();
+}
+
+#[test]
 fn unlink_all_options_long() {
     let package = assert_fs::TempDir::new().unwrap();
     let output = assert_fs::TempDir::new().unwrap();
@@ -44,6 +66,28 @@ fn unlink_all_options_long() {
             "--dry-run",
             "--verbose",
             "--target",
+            output.to_str().unwrap(),
+            "unlink",
+            package.to_str().unwrap(),
+        ])
+        .assert()
+        .success();
+
+    package.close().unwrap();
+    output.close().unwrap();
+}
+
+#[test]
+fn unlink_all_options_short() {
+    let package = assert_fs::TempDir::new().unwrap();
+    let output = assert_fs::TempDir::new().unwrap();
+
+    Command::cargo_bin(env!("CARGO_PKG_NAME"))
+        .unwrap()
+        .args(&[
+            "-n",
+            "-v",
+            "-t",
             output.to_str().unwrap(),
             "unlink",
             package.to_str().unwrap(),
