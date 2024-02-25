@@ -83,7 +83,7 @@ where
             .into_owned()
             .into();
 
-            let links = get_paths(package, target, options.dotfiles, false)?;
+            let links = get_paths(package, &target, options.dotfiles, false)?;
 
             for link in links {
                 f(options, &link)?;
@@ -108,13 +108,11 @@ where
     PathBuf::from(path)
 }
 
-fn get_paths<P>(package: P, target: PathBuf, map_dots: bool, uninstall: bool) -> Result<Vec<Link>>
-where
-    P: AsRef<Path>,
+fn get_paths(package: &PathBuf, target: &PathBuf, map_dots: bool, uninstall: bool) -> Result<Vec<Link>>
 {
     let mut links = Vec::new();
 
-    for res in WalkDir::new(package)
+    for res in WalkDir::new(package.as_path())
         .min_depth(1)
         .contents_first(uninstall)
         .into_iter()
@@ -122,13 +120,14 @@ where
         match res {
             Err(e) => return Err(e.into()),
             Ok(entry) => {
-                let mut comp = entry.path().components();
+                let comp = entry.path();
 
                 // Remove the current dir from the path
-                comp.next();
+                let path = comp.strip_prefix(package)?;
+                log::debug!("Stripped path is {:?}", path);
 
                 // Get path to link origin
-                let raw_target = target.as_path().join(comp.as_path());
+                let raw_target = target.as_path().join(path);
                 let mapped_target = match map_dots {
                     true => map_path_dots(raw_target),
                     false => raw_target,
