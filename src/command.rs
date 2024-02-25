@@ -10,79 +10,83 @@ use crate::links::Link;
 use crate::options::Options;
 
 pub fn unlink(options: &Options) -> Vec<Result<()>> {
-    options
-        .packages
-        .iter()
-        .map(|package| {
-            info!("Processing package {:?}", package);
-
-            let links = get_paths::<_, &Path>(package, options.target.as_ref(), options.dotfiles, true)?;
-
-            for link in links {
-                debug!("{:?}", link);
-                if link.source.is_dir() {
-                    if link.source.read_dir()?.next().is_none() {
-                        info!("Directory {:?} is empty, removing...", link.source);
-                        if !options.dry_run {
-                            let res = remove_dir(link.source);
-                            debug!("remove_dir result {:?}", res);
-                        }
-                    }
-                } else if link.source.is_symlink()
-                    && link.source.read_link()? == link.target
-                {
-                    info!("Removing link: {:?} -> {:?}", link.source, link.target);
-                    if !options.dry_run {
-                        let res = remove_file(link.source);
-                        debug!("remove_file result {:?}", res);
-                    }
-                }
-            }
-
-            info!("Done processing package {:?}", package);
-            Ok(())
-        })
-        .collect()
+    map_packages(options, do_unlink)
 }
 
 pub fn link(options: &Options) -> Vec<Result<()>> {
+    map_packages(options, do_link)
+}
+
+fn do_unlink(options: &Options, link: &Link) -> Result<()> {
+    if link.target.is_dir() {
+        if link.target.read_dir()?.next().is_none() {
+            info!("Directory {:?} is empty, removing...", link.target);
+            if !options.dry_run {
+                let res = remove_dir(link.target.as_path());
+                debug!("remove_dir result {:?}", res);
+            }
+        }
+    } else if link.target.is_symlink() && link.target.read_link()? == link.source {
+        info!("Removing link: {:?} -> {:?}", link.target, link.source);
+        if !options.dry_run {
+            let res = remove_file(link.target.as_path());
+            debug!("remove_file result {:?}", res);
+        }
+    }
+    Ok(())
+}
+
+fn do_link(options: &Options, link: &Link) -> Result<()> {
+    if link.source.is_dir() {
+        if !link.target.exists() {
+            debug!("Making directory {:?}", link.target);
+            if !options.dry_run {
+                let res = create_dir_all(link.target.as_path());
+                debug!("create_dir_all result {:?}", res);
+            }
+        }
+    } else {
+        info!("Processing link: {:?} -> {:?}", link.target, link.source);
+        if link.target.exists() {
+            if link.target.is_symlink() && link.target.read_link()? == link.source {
+                info!("Link {:?} already exists!", link.target)
+            } else if options.adopt {
+                todo!("Implement adopt");
+            } else {
+                error!("Item already exists at link location! {:?}", link.target);
+            }
+        } else if !link.target.exists() {
+            debug!("Making link {:?} -> {:?}", link.target, link.source);
+            if !options.dry_run {
+                let res = symlink(link.source.as_path(), link.target.as_path());
+                debug!("symlink result {:?}", res);
+            }
+        }
+    }
+    Ok(())
+}
+
+fn map_packages<F>(options: &Options, f: F) -> Vec<Result<()>>
+where
+    F: Fn(&Options, &Link) -> Result<()>,
+{
     options
         .packages
         .iter()
         .map(|package| {
             info!("Processing package {:?}", package);
 
-            let links = get_paths::<_, &Path>(package, options.target.as_ref(), options.dotfiles, false)?;
+            // Perform shell expansion on destination name/path
+            let target: PathBuf = shellexpand::full(options.target.to_str().ok_or(
+                anyhow::anyhow!("Could not convert source to str for processing"),
+            )?)?
+            .into_owned()
+            .into();
+
+            let links = get_paths(package, target, options.dotfiles, false)?;
 
             for link in links {
-                if link.target.is_dir() {
-                    if !link.source.exists() {
-                        debug!("Making directory {:?}", link.source);
-                        if !options.dry_run {
-                            let res = create_dir_all(link.source);
-                            debug!("create_dir_all result {:?}", res);
-                        }
-                    }
-                } else {
-                    info!("Processing link: {:?} -> {:?}", link.source, link.target);
-                    if link.source.exists() {
-                        if link.source.is_symlink()
-                            && link.source.read_link()? == link.target
-                        {
-                            info!("Link {:?} already exists!", link.source)
-                        } else if options.adopt {
-                            todo!("Implement adopt");
-                        } else {
-                            error!("Item already exists at link location! {:?}", link.source);
-                        }
-                    } else if !link.source.exists() {
-                        debug!("Making link {:?} -> {:?}", link.source, link.target);
-                        if !options.dry_run {
-                            let res = symlink(link.target, link.source);
-                            debug!("symlink result {:?}", res);
-                        }
-                    }
-                }
+                f(options, &link)?;
             }
 
             info!("Done processing package {:?}", package);
@@ -96,6 +100,7 @@ fn map_path_dots<P>(path: P) -> PathBuf
 where
     P: AsRef<Path>,
 {
+    log::warn!("TODO not handling failing to_str() conversion correctly!");
     let path = match path.as_ref().to_str() {
         Some(str) => str.replace("dot-", "."),
         None => panic!("Couldn't convert path to str"),
@@ -103,10 +108,9 @@ where
     PathBuf::from(path)
 }
 
-fn get_paths<P, T>(package: P, source: T, map_dots: bool, uninstall: bool) -> Result<Vec<Link>>
+fn get_paths<P>(package: P, target: PathBuf, map_dots: bool, uninstall: bool) -> Result<Vec<Link>>
 where
     P: AsRef<Path>,
-    T: AsRef<Path>,
 {
     let mut links = Vec::new();
 
@@ -123,24 +127,19 @@ where
                 // Remove the current dir from the path
                 comp.next();
 
-                let raw_source = source.as_ref().join(comp.as_path());
-                let mapped_source = match map_dots {
-                    true => map_path_dots(raw_source),
-                    false => raw_source,
+                // Get path to link origin
+                let raw_target = target.as_path().join(comp.as_path());
+                let mapped_target = match map_dots {
+                    true => map_path_dots(raw_target),
+                    false => raw_target,
                 };
 
-                // TODO: Should this be done elsewhere since this should be common to the entire
-                // package?
-                // Perform expansions for the path
-                let source = shellexpand::full(
-                    mapped_source
-                        .to_str()
-                        .ok_or(anyhow::anyhow!("Could not convert source to str"))?,
-                )?;
+                // Get absolute path to file inside package
+                let source = entry.path().canonicalize()?.to_path_buf();
 
                 links.push(Link {
-                    target: entry.path().canonicalize()?.to_path_buf(),
-                    source: source.into_owned().into(),
+                    source,
+                    target: mapped_target.to_path_buf(),
                 });
             }
         }
