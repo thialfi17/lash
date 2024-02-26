@@ -2,8 +2,10 @@ use std::fs::{copy, create_dir_all, remove_dir, remove_file, rename};
 use std::os::unix::fs::symlink;
 use std::path::{Path, PathBuf};
 
+#[allow(unused_imports)]
+use log::{debug, error, info, warn};
+
 use anyhow::{anyhow, bail, Result};
-use log::{debug, error, info};
 use walkdir::WalkDir;
 
 use crate::link::Link;
@@ -89,13 +91,16 @@ fn do_link(options: &Options, link: &Link) -> Result<()> {
     Ok(())
 }
 
-fn package_error<E>(package: &Path, err: E) -> (PathBuf, anyhow::Error) 
-    where E: Into<anyhow::Error>
+fn package_error<E>(package: &Path, err: E) -> (PathBuf, anyhow::Error)
+where
+    E: Into<anyhow::Error>,
 {
     (package.to_owned(), err.into())
 }
 
-pub fn process_packages(options: &Options) -> Vec<core::result::Result<PathBuf, (PathBuf, anyhow::Error)>> {
+pub fn process_packages(
+    options: &Options,
+) -> Vec<core::result::Result<PathBuf, (PathBuf, anyhow::Error)>> {
     options
         .packages
         .iter()
@@ -107,8 +112,10 @@ pub fn process_packages(options: &Options) -> Vec<core::result::Result<PathBuf, 
                 options
                     .target
                     .to_str()
-                    .ok_or(anyhow!("Could not convert source to str for processing")).map_err(|err| package_error(package, err))?,
-            ).map_err(|err| package_error(package, err))?
+                    .ok_or(anyhow!("Could not convert source to str for processing"))
+                    .map_err(|err| package_error(package, err))?,
+            )
+            .map_err(|err| package_error(package, err))?
             .into_owned()
             .into();
 
@@ -117,7 +124,8 @@ pub fn process_packages(options: &Options) -> Vec<core::result::Result<PathBuf, 
                 Command::Unlink => false,
             };
 
-            let links = get_paths(package, &target, options.dotfiles, uninstall).map_err(|err| package_error(package, err))?;
+            let links = get_paths(package, &target, options.dotfiles, uninstall)
+                .map_err(|err| package_error(package, err))?;
 
             let f = match options.command {
                 Command::Link => do_link,
@@ -139,7 +147,10 @@ fn map_path_dots<P>(path: P) -> Result<PathBuf>
 where
     P: AsRef<Path>,
 {
-    let str = path.as_ref().to_str().ok_or(anyhow!("Could not convert path to str"))?;
+    let str = path
+        .as_ref()
+        .to_str()
+        .ok_or(anyhow!("Could not convert path to str"))?;
     let path = str.replace("dot-", ".");
     Ok(PathBuf::from(path))
 }
@@ -154,12 +165,7 @@ where
 /// instead of directories then files.
 ///
 /// `map_dots` calls [map_path_dots] on each of the target files/directories.
-fn get_paths(
-    package: &Path,
-    target: &Path,
-    map_dots: bool,
-    uninstall: bool,
-) -> Result<Vec<Link>> {
+fn get_paths(package: &Path, target: &Path, map_dots: bool, uninstall: bool) -> Result<Vec<Link>> {
     let mut links = Vec::new();
 
     for res in WalkDir::new(package)
@@ -183,7 +189,16 @@ fn get_paths(
                 };
 
                 // Get absolute path to file inside package
-                let source = entry.path().canonicalize()?.to_path_buf();
+                let source = match entry.path().canonicalize() {
+                    Err(e) => {
+                        error!(
+                            "Could not get canonical path of {:?}, does the file/path exist?",
+                            entry.path()
+                        );
+                        return Err(e.into());
+                    }
+                    Ok(p) => p.to_owned(),
+                };
 
                 links.push(Link {
                     source,
