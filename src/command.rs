@@ -1,4 +1,4 @@
-use std::fs::{copy, create_dir_all, remove_dir, remove_file, rename};
+use std::fs::{copy, create_dir_all, remove_dir, remove_file};
 use std::os::unix::fs::symlink;
 use std::path::{Path, PathBuf};
 
@@ -54,21 +54,25 @@ fn do_link(options: &Options, link: &Link) -> Result<()> {
             } else if options.adopt {
                 info!("Found a file at {:?}, adopting...", link.target);
                 debug!("Should I add a confirm/noconfirm option?");
+                let target = link.target.canonicalize()?;
 
                 if !options.dry_run {
-                    let res = rename(link.target.as_path(), link.source.as_path());
-                    debug!("rename result {:?}", res);
+                    // If the target is a symlink we should take the target of the symlink unless
+                    // the target of the symlink is already the source. Attempting to copy from/to
+                    // the same file will cause the file to be truncated!
+                    let res = if target != link.source {
+                        copy(&target, link.source.as_path())
+                    } else {
+                        Ok(0)
+                    };
+                    debug!("copy result {:?}", res);
 
-                    if res.is_err() {
-                        let res = copy(link.target.as_path(), link.source.as_path());
-                        debug!("copy result {:?}", res);
-
-                        if res.is_ok() {
-                            let res = remove_file(link.target.as_path());
-                            debug!("remove_file result {:?}", res);
-                        } else {
-                            bail!("Failed to adopt file");
-                        }
+                    if res.is_ok() {
+                        // But make sure to delete the symlink and not the target of the symlink!
+                        let res = remove_file(link.target.as_path());
+                        debug!("remove_file result {:?}", res);
+                    } else {
+                        bail!("Failed to adopt file");
                     }
                 }
 
