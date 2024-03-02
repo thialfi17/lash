@@ -63,6 +63,7 @@ fn do_link(options: &Options, link: &Link) -> Result<()> {
                     let res = if target != link.source {
                         copy(&target, link.source.as_path())
                     } else {
+                        debug!("File was a link pointing to the owned file, skipping copy...");
                         Ok(0)
                     };
                     debug!("copy result {:?}", res);
@@ -81,6 +82,7 @@ fn do_link(options: &Options, link: &Link) -> Result<()> {
                     let res = symlink(link.source.as_path(), link.target.as_path());
                     debug!("symlink result {:?}", res);
                 }
+                info!("Created link {:?} -> {:?}", link.target, link.source);
             } else {
                 error!("Item already exists at link location! {:?}", link.target);
             }
@@ -90,6 +92,7 @@ fn do_link(options: &Options, link: &Link) -> Result<()> {
                 let res = symlink(link.source.as_path(), link.target.as_path());
                 debug!("symlink result {:?}", res);
             }
+            info!("Created link {:?} -> {:?}", link.target, link.source);
         }
     }
     Ok(())

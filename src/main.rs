@@ -38,8 +38,10 @@
 //! even then some bugs remained (try using `--dotfiles` and `--adopt` with GNU Stow and the
 //! patches!).
 
+#[allow(unused_imports)]
+use log::{debug, info, warn, error};
+
 use anyhow::Result;
-use log::debug;
 use simplelog::{ColorChoice, LevelFilter, TermLogger, TerminalMode};
 
 use crate::options::Options;
@@ -69,8 +71,8 @@ fn main() -> Result<()> {
 
     for res in command::process_packages(&options) {
         match res {
-            Ok(p) => debug!("Successfully processed package {:?}", p),
-            Err((p, e)) => debug!("Failed to process package {:?} due to: {}", p, e),
+            Ok(p) => info!("Successfully processed package {:?}", p),
+            Err((p, e)) => warn!("Failed to process package {:?} due to: {}", p, e),
         }
     }
 
