@@ -14,7 +14,7 @@ fn link_1_file() {
 
     Command::cargo_bin(env!("CARGO_PKG_NAME"))
         .unwrap()
-        .args(&[
+        .args([
             "--target",
             output.to_str().unwrap(),
             "link",
@@ -43,7 +43,7 @@ fn unlink_1_file() {
 
     Command::cargo_bin(env!("CARGO_PKG_NAME"))
         .unwrap()
-        .args(&[
+        .args([
             "--target",
             output.to_str().unwrap(),
             "unlink",
@@ -53,7 +53,7 @@ fn unlink_1_file() {
         .success();
 
     assert!(in_file.exists(), "In file exists");
-    assert_eq!(out_file.exists(), false);
+    assert!(!out_file.exists());
 
     package.close().unwrap();
     output.close().unwrap();
@@ -70,7 +70,7 @@ fn link_1_file_dry_run() {
 
     Command::cargo_bin(env!("CARGO_PKG_NAME"))
         .unwrap()
-        .args(&[
+        .args([
             "--dry-run",
             "--target",
             output.to_str().unwrap(),
@@ -81,7 +81,7 @@ fn link_1_file_dry_run() {
         .success();
 
     assert!(in_file.exists(), "In file exists");
-    assert_eq!(out_file.exists(), false);
+    assert!(!out_file.exists());
 
     package.close().unwrap();
     output.close().unwrap();
@@ -99,7 +99,7 @@ fn link_1_file_adopt() {
 
     Command::cargo_bin(env!("CARGO_PKG_NAME"))
         .unwrap()
-        .args(&[
+        .args([
             "--verbose",
             "--target",
             output.to_str().unwrap(),
@@ -113,9 +113,9 @@ fn link_1_file_adopt() {
     let contents = fs::read_to_string(in_file.path()).unwrap();
 
     assert!(in_file.exists(), "In file exists");
-    assert_eq!(in_file.is_symlink(), false, "In file is not a symlink");
-    assert_eq!(out_file.exists(), true, "Out file exists");
-    assert_eq!(out_file.is_symlink(), true, "Out file is a symlink");
+    assert!(!in_file.is_symlink(), "In file is not a symlink");
+    assert!(out_file.exists(), "Out file exists");
+    assert!(out_file.is_symlink(), "Out file is a symlink");
     assert_eq!(
         out_file.read_link().unwrap(),
         in_file.path(),
@@ -139,7 +139,7 @@ fn link_1_file_adopt_dry_run() {
 
     Command::cargo_bin(env!("CARGO_PKG_NAME"))
         .unwrap()
-        .args(&[
+        .args([
             "--verbose",
             "--dry-run",
             "--target",
@@ -154,9 +154,9 @@ fn link_1_file_adopt_dry_run() {
     let contents = fs::read_to_string(in_file.path()).unwrap();
 
     assert!(in_file.exists(), "In file exists");
-    assert_eq!(in_file.is_symlink(), false, "In file is not a symlink");
-    assert_eq!(out_file.exists(), true, "Out file exists");
-    assert_eq!(out_file.is_symlink(), false, "Out file is not a symlink");
+    assert!(!in_file.is_symlink(), "In file is not a symlink");
+    assert!(out_file.exists(), "Out file exists");
+    assert!(!out_file.is_symlink(), "Out file is not a symlink");
     assert_eq!("", contents, "In file has still got empty contents");
 
     package.close().unwrap();
@@ -175,7 +175,7 @@ fn unlink_1_file_dry_run() {
 
     Command::cargo_bin(env!("CARGO_PKG_NAME"))
         .unwrap()
-        .args(&[
+        .args([
             "--dry-run",
             "--target",
             output.to_str().unwrap(),
