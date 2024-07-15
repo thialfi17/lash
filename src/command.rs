@@ -127,8 +127,8 @@ pub fn process_packages(
             .into();
 
             let uninstall = match options.command {
-                Command::Link => true,
-                Command::Unlink => false,
+                Command::Link => false,
+                Command::Unlink => true,
             };
 
             let links = get_paths(package, &target, options.dotfiles, uninstall)
