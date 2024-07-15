@@ -47,9 +47,16 @@ fn directory_with_file_is_removed() {
 
     let output = assert_fs::TempDir::new().unwrap();
     let out_dir = output.child("sub_dir");
-    let out_file = output.child("sub_dir/file.txt");
+    let out_file = out_dir.child("file.txt");
 
+    out_dir.create_dir_all().unwrap();
     out_file.symlink_to_file(in_file.path()).unwrap();
+
+    assert_eq!(
+        out_file.read_link().unwrap(),
+        in_file.path(),
+        "Out file points to in file"
+    );
 
     Command::cargo_bin(env!("CARGO_PKG_NAME"))
         .unwrap()
