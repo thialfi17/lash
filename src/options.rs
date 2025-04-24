@@ -79,17 +79,15 @@ impl Options {
 
         // Can use unwrap_unchecked here for these values because we know they have to
         // have been set when using the ::from on a `Cli` value.
-        unsafe {
-            Ok(Self {
-                dotfiles,
-                dry_run: cli.dry_run.unwrap_unchecked(),
-                verbose,
-                target: target.into_owned().into(),
-                command: cli.command.unwrap_unchecked(),
-                adopt,
-                packages: cli.packages.unwrap_unchecked(),
-            })
-        }
+        Ok(Self {
+            dotfiles,
+            dry_run: unsafe { cli.dry_run.unwrap_unchecked() },
+            verbose,
+            target: target.into_owned().into(),
+            command: unsafe { cli.command.unwrap_unchecked() },
+            adopt,
+            packages: unsafe { cli.packages.unwrap_unchecked() },
+        })
     }
 }
 
@@ -118,7 +116,7 @@ impl From<&crate::cli::Cli> for MaybeOptions {
             _ => None,
         };
 
-        let packages = match value.command {
+        let packages = match value.command { // Needs to be `Some` due to unsafe code
             crate::cli::Command::Link { ref packages, .. } => Some(packages.clone()),
             crate::cli::Command::Unlink { ref packages } => Some(packages.clone()),
         };
@@ -130,12 +128,12 @@ impl From<&crate::cli::Cli> for MaybeOptions {
 
         Self {
             dotfiles: Some(value.dotfiles),
-            dry_run: Some(value.dry_run),
+            dry_run: Some(value.dry_run), // Needs to be `Some` due to unsafe code
             verbose: Some(value.verbose),
             target: value.target.clone(),
-            command: Some(command),
+            command: Some(command), // Needs to be `Some` due to unsafe code
             adopt,
-            packages,
+            packages, // Needs to be `Some` due to unsafe code
         }
     }
 }
