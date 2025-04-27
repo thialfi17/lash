@@ -37,38 +37,30 @@ pub struct Options {
     pub packages: Vec<PathBuf>,
 }
 
-#[derive(Debug)]
-/// Temporary struct used to map all of the options from different sources into the same structure.
-/// This is then merged to create a [Options] struct with all of the values determined.
-struct MaybeOptions {
-    pub dotfiles: Option<bool>,
-    pub dry_run: Option<bool>,
-    pub verbose: Option<bool>,
-    pub target: Option<PathBuf>,
-    pub command: Option<Command>,
-    pub adopt: Option<bool>,
-    pub packages: Option<Vec<PathBuf>>,
-}
-
 impl Options {
     /// Parse the CLI flags and attempt to read the configuration files.
     ///
     /// Merges the outputs to generate the options that the command should be ran with.
     pub fn new() -> Result<Self> {
-        let cli_options: MaybeOptions = Cli::parse().borrow().into();
-        let config_options: MaybeOptions = Config::new()?.borrow().into();
+        let cli_options = Cli::parse();
+        let config_options = Config::new()?;
 
-        Self::merge(cli_options, config_options)
+        Self::merge(cli_options.borrow(), config_options.borrow())
     }
 
     /// Merge the options from the command line and the configuration files. All of the potential
     /// options need to have a value.
-    fn merge(cli: MaybeOptions, config: MaybeOptions) -> Result<Self> {
-        let dotfiles = config.dotfiles.unwrap_or(false) | cli.dotfiles.unwrap_or(false);
-        let verbose = config.verbose.unwrap_or(false) | cli.verbose.unwrap_or(false);
-        let adopt = config.adopt.unwrap_or(false) | cli.adopt.unwrap_or(false);
+    fn merge(cli: &Cli, config: &Config) -> Result<Self> {
+        let dotfiles = config.dotfiles.unwrap_or(false) | cli.dotfiles;
+        let verbose = config.verbose.unwrap_or(false) | cli.verbose;
+        // TODO: Why does the options enum *have* to contain a value for adopt when it's only used
+        // for some operations?
+        let adopt = config.adopt.unwrap_or(false) | match cli.command {
+            crate::cli::Command::Link { adopt, .. } => adopt,
+            crate::cli::Command::Unlink { .. } => false,
+        };
 
-        let mut raw_target = cli.target.or(config.target);
+        let mut raw_target = cli.target.to_owned().or(config.target.to_owned());
         let raw_target =
             raw_target.get_or_insert(dirs::home_dir().expect("Could not get home dir!"));
         let target = shellexpand::full(
@@ -81,59 +73,18 @@ impl Options {
         // have been set when using the ::from on a `Cli` value.
         Ok(Self {
             dotfiles,
-            dry_run: unsafe { cli.dry_run.unwrap_unchecked() },
+            dry_run: cli.dry_run,
             verbose,
             target: target.into_owned().into(),
-            command: unsafe { cli.command.unwrap_unchecked() },
+            command: match cli.command {
+                crate::cli::Command::Link { .. } => Command::Link,
+                crate::cli::Command::Unlink { .. } => Command::Unlink,
+            },
             adopt,
-            packages: unsafe { cli.packages.unwrap_unchecked() },
+            packages: match &cli.command {
+                crate::cli::Command::Link { packages, .. } => packages.to_owned(),
+                crate::cli::Command::Unlink { packages } => packages.to_owned(),
+            },
         })
-    }
-}
-
-impl From<&Config> for MaybeOptions {
-    /// Some options are not settable in the config files such as dry_run, command and packages.
-    /// These can never be `Some`.
-    fn from(value: &Config) -> Self {
-        Self {
-            dotfiles: value.dotfiles,
-            dry_run: None,
-            verbose: value.verbose,
-            target: value.target.clone(),
-            command: None,
-            adopt: value.adopt,
-            packages: None,
-        }
-    }
-}
-
-impl From<&crate::cli::Cli> for MaybeOptions {
-    /// All options should be settable from the command line so all values should have the
-    /// potential to be `Some`.
-    fn from(value: &crate::cli::Cli) -> Self {
-        let adopt = match value.command {
-            crate::cli::Command::Link { adopt, .. } => Some(adopt),
-            _ => None,
-        };
-
-        let packages = match value.command { // Needs to be `Some` due to unsafe code
-            crate::cli::Command::Link { ref packages, .. } => Some(packages.clone()),
-            crate::cli::Command::Unlink { ref packages } => Some(packages.clone()),
-        };
-
-        let command = match value.command {
-            crate::cli::Command::Link { .. } => Command::Link,
-            crate::cli::Command::Unlink { .. } => Command::Unlink,
-        };
-
-        Self {
-            dotfiles: Some(value.dotfiles),
-            dry_run: Some(value.dry_run), // Needs to be `Some` due to unsafe code
-            verbose: Some(value.verbose),
-            target: value.target.clone(),
-            command: Some(command), // Needs to be `Some` due to unsafe code
-            adopt,
-            packages, // Needs to be `Some` due to unsafe code
-        }
     }
 }
