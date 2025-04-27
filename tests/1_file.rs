@@ -4,6 +4,41 @@ use assert_cmd::Command;
 use assert_fs::prelude::*;
 
 #[test]
+fn link_1_file_no_overwrite() {
+    let package = assert_fs::TempDir::new().unwrap();
+    let output = assert_fs::TempDir::new().unwrap();
+    let in_file = package.child("file.txt");
+    let out_file = output.child("file.txt");
+    let out_contents: Vec<u8> = rand::random_iter().take(256).collect();
+
+    in_file.touch().unwrap();
+    out_file.write_binary(&out_contents).unwrap();
+
+    Command::cargo_bin(env!("CARGO_PKG_NAME"))
+        .unwrap()
+        .args([
+            "--verbose",
+            "--target",
+            output.to_str().unwrap(),
+            "link",
+            package.to_str().unwrap(),
+        ])
+        .assert()
+        .success();
+
+    let contents: Vec<u8> = fs::read(in_file.path()).unwrap();
+
+    assert!(in_file.exists(), "In file doesn't exist");
+    assert!(!in_file.is_symlink(), "In file is a symlink");
+    assert!(out_file.exists(), "Out file does not exist");
+    assert!(!out_file.is_symlink(), "Out file was changed to a symlink");
+    assert!(contents.is_empty(), "In file contents were overwritten");
+
+    package.close().unwrap();
+    output.close().unwrap();
+}
+
+#[test]
 fn link_1_file() {
     let package = assert_fs::TempDir::new().unwrap();
     let output = assert_fs::TempDir::new().unwrap();
