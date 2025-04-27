@@ -34,7 +34,10 @@ fn adopt_link_target_not_link() {
     // Check in file has adopted the other file
     assert!(in_file.exists(), "In file does not exist");
     assert!(!in_file.is_symlink(), "In file is a symlink");
-    assert_eq!(original_contents, contents, "In file hasn't got out file's contents");
+    assert_eq!(
+        original_contents, contents,
+        "In file hasn't got out file's contents"
+    );
 
     // Check out file has been updated to point to in file
     assert!(out_file.exists(), "Out file does not exist");

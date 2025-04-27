@@ -157,7 +157,10 @@ fn link_1_file_adopt() {
         in_file.path(),
         "Out file points to in file"
     );
-    assert_eq!(in_contents, out_contents, "In file hasn't got out file's contents");
+    assert_eq!(
+        in_contents, out_contents,
+        "In file hasn't got out file's contents"
+    );
 
     package.close().unwrap();
     output.close().unwrap();

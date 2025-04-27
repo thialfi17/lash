@@ -246,24 +246,21 @@ fn check_zombies(package: &Path, target: &Path, options: &Options) -> Result<()>
                         }
                         if options.dry_run {
                             cleaned_files.insert(entry.path().to_path_buf());
-                        }
-                        else {
+                        } else {
                             let res = remove_file(entry.path());
                             debug!("remove_file result {:?}", res);
                         }
                     }
                 } else if entry.path().is_dir() {
                     debug!("Checking directory: {:?}", entry.path());
-                    if clean_dirs.contains(entry.path().canonicalize()?.as_path())
-                    {
+                    if clean_dirs.contains(entry.path().canonicalize()?.as_path()) {
                         if options.dry_run {
                             if entry.path().read_dir()?.fold(true, |state, elem| {
                                 cleaned_files.contains(&elem.unwrap().path()) & state
                             }) {
                                 info!("Removing zombie dir {:?}", entry.path());
                             }
-                        }
-                        else if entry.path().read_dir()?.next().is_none() {
+                        } else if entry.path().read_dir()?.next().is_none() {
                             info!("Removing zombie dir {:?}", entry.path());
                             let res = remove_dir(entry.path());
                             debug!("remove_dir result {:?}", res);
