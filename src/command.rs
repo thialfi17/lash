@@ -1,3 +1,4 @@
+use std::collections::HashSet;
 use std::fs::{copy, create_dir_all, remove_dir, remove_file};
 use std::os::unix::fs::symlink;
 use std::path::{Path, PathBuf};
@@ -139,6 +140,8 @@ pub fn process_packages(
                 Command::Unlink => do_unlink,
             };
 
+            check_zombies(package, &target, options).map_err(|err| package_error(package, err))?;
+
             for link in links {
                 f(options, &link).map_err(|err| package_error(package, err))?;
             }
@@ -216,4 +219,59 @@ fn get_paths(package: &Path, target: &Path, map_dots: bool, uninstall: bool) -> 
     }
 
     Ok(links)
+}
+
+fn check_zombies(package: &Path, target: &Path, options: &Options) -> Result<()> {
+    let mut clean_dirs: HashSet<PathBuf> = HashSet::new();
+    // Only needed for dry-run mode
+    let mut cleaned_files: HashSet<PathBuf> = HashSet::new();
+
+    info!("Checking package {:?} for zombie links", package);
+
+    for res in WalkDir::new(target)
+        .min_depth(1)
+        .contents_first(true)
+        .into_iter()
+    {
+        match res {
+            Err(e) => return Err(e.into()),
+            Ok(entry) => {
+                if entry.path_is_symlink() {
+                    let link_dest = entry.path().read_link()?;
+
+                    if link_dest.starts_with(package.canonicalize()?) && !link_dest.exists() {
+                        info!("Removing zombie link {:?}", entry.path());
+                        if let Some(parent) = entry.path().parent() {
+                            clean_dirs.insert(parent.canonicalize()?.to_path_buf());
+                        }
+                        if options.dry_run {
+                            cleaned_files.insert(entry.path().to_path_buf());
+                        }
+                        else {
+                            let res = remove_file(entry.path());
+                            debug!("remove_file result {:?}", res);
+                        }
+                    }
+                } else if entry.path().is_dir() {
+                    debug!("Checking directory: {:?}", entry.path());
+                    if clean_dirs.contains(entry.path().canonicalize()?.as_path())
+                    {
+                        if options.dry_run {
+                            if entry.path().read_dir()?.fold(true, |state, elem| {
+                                cleaned_files.contains(&elem.unwrap().path()) & state
+                            }) {
+                                info!("Removing zombie dir {:?}", entry.path());
+                            }
+                        }
+                        else if entry.path().read_dir()?.next().is_none() {
+                            info!("Removing zombie dir {:?}", entry.path());
+                            let res = remove_dir(entry.path());
+                            debug!("remove_dir result {:?}", res);
+                        }
+                    }
+                }
+            }
+        }
+    }
+    Ok(())
 }
