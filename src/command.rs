@@ -1,4 +1,4 @@
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet, VecDeque};
 use std::fs::{copy, create_dir_all, remove_dir, remove_file};
 use std::os::unix::fs::symlink;
 use std::path::{Path, PathBuf};
@@ -6,7 +6,7 @@ use std::path::{Path, PathBuf};
 #[allow(unused_imports)]
 use log::{debug, error, info, warn};
 
-use anyhow::{anyhow, bail, Result};
+use anyhow::{Result, anyhow, bail};
 use walkdir::WalkDir;
 
 use crate::link::Link;
@@ -15,12 +15,13 @@ use crate::options::{Command, Options};
 /// Performs the actions for a given [Link] when uninstalling a package.
 ///
 /// The actions taken vary depending on if the [Link] target is a directory or a symlink.
-fn do_unlink(options: &Options, link: &Link) -> Result<()> {
+fn do_unlink(options: &Options, link: &Link, store: &mut HashMap<PathBuf, PathBuf>) -> Result<()> {
     if link.target.is_dir() {
         if link.target.read_dir()?.next().is_none() {
             info!("Directory {:?} is empty, removing...", link.target);
             if !options.dry_run {
                 let res = remove_dir(link.target.as_path());
+                store.remove(&link.target);
                 debug!("remove_dir result {:?}", res);
             }
         }
@@ -28,6 +29,7 @@ fn do_unlink(options: &Options, link: &Link) -> Result<()> {
         info!("Removing link: {:?} -> {:?}", link.target, link.source);
         if !options.dry_run {
             let res = remove_file(link.target.as_path());
+            store.remove(&link.target);
             debug!("remove_file result {:?}", res);
         }
     }
@@ -38,11 +40,12 @@ fn do_unlink(options: &Options, link: &Link) -> Result<()> {
 ///
 /// The actions taken vary depending on if the [Link] source is a directory or if the target exists
 /// or is a symlink.
-fn do_link(options: &Options, link: &Link) -> Result<()> {
+fn do_link(options: &Options, link: &Link, store: &mut HashMap<PathBuf, PathBuf>) -> Result<()> {
     if link.source.is_dir() {
         if !link.target.exists() {
             debug!("Making directory {:?}", link.target);
             if !options.dry_run {
+                store.insert(link.target.to_owned(), link.source.to_owned());
                 let res = create_dir_all(link.target.as_path());
                 debug!("create_dir_all result {:?}", res);
             }
@@ -81,16 +84,18 @@ fn do_link(options: &Options, link: &Link) -> Result<()> {
                 debug!("Making link {:?} -> {:?}", link.target, link.source);
                 if !options.dry_run {
                     let res = symlink(link.source.as_path(), link.target.as_path());
+                    store.insert(link.target.to_owned(), link.source.to_owned());
                     debug!("symlink result {:?}", res);
                 }
                 info!("Created link {:?} -> {:?}", link.target, link.source);
             } else {
                 error!("Item already exists at link location! {:?}", link.target);
             }
-        } else if !link.target.exists() {
+        } else {
             debug!("Making link {:?} -> {:?}", link.target, link.source);
             if !options.dry_run {
                 let res = symlink(link.source.as_path(), link.target.as_path());
+                store.insert(link.target.to_owned(), link.source.to_owned());
                 debug!("symlink result {:?}", res);
             }
             info!("Created link {:?} -> {:?}", link.target, link.source);
@@ -108,6 +113,7 @@ where
 
 pub fn process_packages(
     options: &Options,
+    store: &mut HashMap<PathBuf, PathBuf>,
 ) -> Vec<core::result::Result<PathBuf, (PathBuf, anyhow::Error)>> {
     options
         .packages
@@ -140,10 +146,11 @@ pub fn process_packages(
                 Command::Unlink => do_unlink,
             };
 
-            check_zombies(package, &target, options).map_err(|err| package_error(package, err))?;
+            check_zombies(package, &target, options, store)
+                .map_err(|err| package_error(package, err))?;
 
             for link in links {
-                f(options, &link).map_err(|err| package_error(package, err))?;
+                f(options, &link, store).map_err(|err| package_error(package, err))?;
             }
 
             debug!("Done processing package {:?}", package);
@@ -193,6 +200,16 @@ fn get_paths(package: &Path, target: &Path, map_dots: bool, uninstall: bool) -> 
 
                 // Get path to link origin
                 let raw_target = target.join(path);
+                let raw_target = match std::path::absolute(&raw_target) {
+                    Err(e) => {
+                        error!(
+                            "Could not get absolute path for {:?}. Does the current directory exist?",
+                            raw_target
+                        );
+                        return Err(e.into());
+                    }
+                    Ok(p) => p.to_owned(),
+                };
                 let mapped_target = match map_dots {
                     true => map_path_dots(raw_target)?,
                     false => raw_target,
@@ -221,54 +238,118 @@ fn get_paths(package: &Path, target: &Path, map_dots: bool, uninstall: bool) -> 
     Ok(links)
 }
 
-fn check_zombies(package: &Path, target: &Path, options: &Options) -> Result<()> {
-    let mut clean_dirs: HashSet<PathBuf> = HashSet::new();
+fn check_zombies(
+    package: &Path,
+    target: &Path,
+    options: &Options,
+    store: &mut HashMap<PathBuf, PathBuf>,
+) -> Result<()> {
+    let mut clean_dirh: HashSet<PathBuf> = HashSet::new();
+    let mut clean_dirq: VecDeque<PathBuf> = VecDeque::new();
     // Only needed for dry-run mode
     let mut cleaned_files: HashSet<PathBuf> = HashSet::new();
 
-    info!("Checking destination for dangling links to package {:?}", package);
+    info!(
+        "Checking destination for dangling links to package {:?}",
+        package
+    );
 
-    for res in WalkDir::new(target)
-        .min_depth(1)
-        .contents_first(true)
-        .into_iter()
-    {
-        match res {
-            Err(e) => error!("Encountered error: {:?}", e),
-            Ok(entry) => {
-                if entry.path_is_symlink() {
-                    let link_dest = entry.path().read_link()?;
+    let absolute_target = match std::path::absolute(target) {
+        Err(e) => {
+            error!(
+                "Could not get absolute path of {:?}. Does the current directory exist?",
+                target
+            );
+            return Err(e.into());
+        }
+        Ok(p) => p,
+    };
+    let canonicalized_package = match package.canonicalize() {
+        Err(e) => {
+            error!("Could not get canonicalized path of {:?}.", package);
+            return Err(e.into());
+        }
+        Ok(p) => p,
+    };
 
-                    if link_dest.starts_with(package.canonicalize()?) && !link_dest.exists() {
-                        info!("Removing zombie link {:?}", entry.path());
-                        if let Some(parent) = entry.path().parent() {
-                            clean_dirs.insert(parent.canonicalize()?.to_path_buf());
+    let mut keys_to_remove: HashSet<PathBuf> = HashSet::new();
+    for entry in store.keys().filter(|i| i.starts_with(&absolute_target)) {
+        if store
+            .get(entry)
+            .unwrap()
+            .starts_with(&canonicalized_package)
+        {
+            debug!(
+                "Store entry found for this package+target: {:?}",
+                store.get(entry).unwrap()
+            );
+            match entry.try_exists() {
+                Ok(false) => {
+                    // broken symbolic link
+                    let link_dest = entry.read_link()?;
+
+                    if link_dest.starts_with(&canonicalized_package) && !link_dest.exists() {
+                        info!("Removing zombie link {:?}", entry);
+                        if let Some(parent) = entry.parent() {
+                            if !clean_dirh.contains(parent) {
+                                clean_dirq.push_back(parent.to_path_buf());
+                                clean_dirh.insert(parent.to_path_buf());
+                            }
                         }
                         if options.dry_run {
-                            cleaned_files.insert(entry.path().to_path_buf());
+                            cleaned_files.insert(entry.to_path_buf());
                         } else {
-                            let res = remove_file(entry.path());
+                            let res = remove_file(entry);
+                            keys_to_remove.insert(link_dest);
                             debug!("remove_file result {:?}", res);
                         }
                     }
-                } else if entry.path().is_dir() {
-                    debug!("Checking directory: {:?}", entry.path());
-                    if clean_dirs.contains(entry.path().canonicalize()?.as_path()) {
-                        if options.dry_run {
-                            if entry.path().read_dir()?.fold(true, |state, elem| {
-                                cleaned_files.contains(&elem.unwrap().path()) & state
-                            }) {
-                                info!("Removing zombie dir {:?}", entry.path());
-                            }
-                        } else if entry.path().read_dir()?.next().is_none() {
-                            info!("Removing zombie dir {:?}", entry.path());
-                            let res = remove_dir(entry.path());
-                            debug!("remove_dir result {:?}", res);
-                        }
+                }
+                Ok(true) => { // dir/target exists so nothing to do
+                }
+                Err(e) => {
+                    error!("Could not check if {:?} exists.", entry);
+                    return Err(e.into());
+                }
+            }
+        }
+    }
+    for key in keys_to_remove {
+        store.remove(&key);
+    }
+
+    while !clean_dirq.is_empty() {
+        let entry = clean_dirq.pop_front().unwrap();
+
+        if store.contains_key(&entry) {
+            if !options.dry_run && entry.read_dir().unwrap().next().is_none() {
+                info!("Removing zombie dir {:?}", &entry);
+                let res = remove_dir(&entry);
+                debug!("remove_dir result {:?}", res);
+                store.remove(&entry);
+                if let Some(parent) = entry.parent() {
+                    if !clean_dirh.contains(parent) {
+                        clean_dirq.push_back(parent.to_path_buf());
+                        clean_dirh.insert(parent.to_path_buf());
+                    }
+                }
+            } else if options.dry_run
+                && entry
+                    .read_dir()
+                    .unwrap()
+                    .all(|e| cleaned_files.contains(&e.unwrap().path()))
+            {
+                info!("Removing zombie dir {:?}", &entry);
+                cleaned_files.insert(entry.to_path_buf());
+                if let Some(parent) = entry.parent() {
+                    if !clean_dirh.contains(parent) {
+                        clean_dirq.push_back(parent.to_path_buf());
+                        clean_dirh.insert(parent.to_path_buf());
                     }
                 }
             }
         }
     }
+
     Ok(())
 }
