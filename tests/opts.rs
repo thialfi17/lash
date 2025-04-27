@@ -15,7 +15,7 @@ fn link_all_options_long() {
 
     Command::cargo_bin(env!("CARGO_PKG_NAME"))
         .unwrap()
-        .args(&[
+        .args([
             "--dotfiles",
             "--dry-run",
             "--verbose",
@@ -39,7 +39,7 @@ fn link_all_options_short() {
 
     Command::cargo_bin(env!("CARGO_PKG_NAME"))
         .unwrap()
-        .args(&[
+        .args([
             "-n",
             "-v",
             "-t",
@@ -61,7 +61,7 @@ fn unlink_all_options_long() {
 
     Command::cargo_bin(env!("CARGO_PKG_NAME"))
         .unwrap()
-        .args(&[
+        .args([
             "--dotfiles",
             "--dry-run",
             "--verbose",
@@ -84,7 +84,7 @@ fn unlink_all_options_short() {
 
     Command::cargo_bin(env!("CARGO_PKG_NAME"))
         .unwrap()
-        .args(&[
+        .args([
             "-n",
             "-v",
             "-t",

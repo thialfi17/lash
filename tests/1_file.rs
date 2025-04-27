@@ -23,7 +23,7 @@ fn link_1_file() {
         .assert()
         .success();
 
-    assert!(in_file.exists(), "In file exists");
+    assert!(in_file.exists(), "In file doesn't exist");
     assert!(out_file.is_symlink());
     assert_eq!(out_file.read_link().unwrap(), in_file.path());
 
@@ -52,7 +52,7 @@ fn unlink_1_file() {
         .assert()
         .success();
 
-    assert!(in_file.exists(), "In file exists");
+    assert!(in_file.exists(), "In file doesn't exist");
     assert!(!out_file.exists());
 
     package.close().unwrap();
@@ -80,7 +80,7 @@ fn link_1_file_dry_run() {
         .assert()
         .success();
 
-    assert!(in_file.exists(), "In file exists");
+    assert!(in_file.exists(), "In file doesn't exist");
     assert!(!out_file.exists());
 
     package.close().unwrap();
@@ -93,9 +93,10 @@ fn link_1_file_adopt() {
     let output = assert_fs::TempDir::new().unwrap();
     let in_file = package.child("file.txt");
     let out_file = output.child("file.txt");
+    let out_contents: Vec<u8> = rand::random_iter().take(256).collect();
 
     in_file.touch().unwrap();
-    out_file.write_str("test").unwrap();
+    out_file.write_binary(&out_contents).unwrap();
 
     Command::cargo_bin(env!("CARGO_PKG_NAME"))
         .unwrap()
@@ -110,18 +111,18 @@ fn link_1_file_adopt() {
         .assert()
         .success();
 
-    let contents = fs::read_to_string(in_file.path()).unwrap();
+    let in_contents = fs::read(in_file.path()).unwrap();
 
-    assert!(in_file.exists(), "In file exists");
-    assert!(!in_file.is_symlink(), "In file is not a symlink");
-    assert!(out_file.exists(), "Out file exists");
-    assert!(out_file.is_symlink(), "Out file is a symlink");
+    assert!(in_file.exists(), "In file doesn't exist");
+    assert!(!in_file.is_symlink(), "In file is a symlink");
+    assert!(out_file.exists(), "Out file doesn't exist");
+    assert!(out_file.is_symlink(), "Out file is not a symlink");
     assert_eq!(
         out_file.read_link().unwrap(),
         in_file.path(),
         "Out file points to in file"
     );
-    assert_eq!("test", contents, "In file has now got out file's contents");
+    assert_eq!(in_contents, out_contents, "In file hasn't got out file's contents");
 
     package.close().unwrap();
     output.close().unwrap();
@@ -133,9 +134,10 @@ fn link_1_file_adopt_dry_run() {
     let output = assert_fs::TempDir::new().unwrap();
     let in_file = package.child("file.txt");
     let out_file = output.child("file.txt");
+    let out_contents: Vec<u8> = rand::random_iter().take(256).collect();
 
     in_file.touch().unwrap();
-    out_file.write_str("test").unwrap();
+    out_file.write_binary(&out_contents).unwrap();
 
     Command::cargo_bin(env!("CARGO_PKG_NAME"))
         .unwrap()
@@ -151,13 +153,13 @@ fn link_1_file_adopt_dry_run() {
         .assert()
         .success();
 
-    let contents = fs::read_to_string(in_file.path()).unwrap();
+    let contents: Vec<u8> = fs::read(in_file.path()).unwrap();
 
-    assert!(in_file.exists(), "In file exists");
-    assert!(!in_file.is_symlink(), "In file is not a symlink");
-    assert!(out_file.exists(), "Out file exists");
-    assert!(!out_file.is_symlink(), "Out file is not a symlink");
-    assert_eq!("", contents, "In file has still got empty contents");
+    assert!(in_file.exists(), "In file doesn't exist");
+    assert!(!in_file.is_symlink(), "In file is a symlink");
+    assert!(out_file.exists(), "Out file does not exist");
+    assert!(!out_file.is_symlink(), "Out file was changed to a symlink");
+    assert!(contents.is_empty(), "In file contents were overwritten");
 
     package.close().unwrap();
     output.close().unwrap();
@@ -185,7 +187,7 @@ fn unlink_1_file_dry_run() {
         .assert()
         .success();
 
-    assert!(in_file.exists(), "In file exists");
+    assert!(in_file.exists(), "In file doesn't exist");
     assert!(out_file.is_symlink());
     assert_eq!(out_file.read_link().unwrap(), in_file.path());
 

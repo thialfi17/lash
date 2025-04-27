@@ -25,14 +25,14 @@ fn file_in_directory_created() {
         .assert()
         .success();
 
-    assert!(in_file.exists(), "In file exists");
-    assert!(out_dir.exists(), "Out dir exists");
-    assert!(out_file.exists(), "Out file exists");
-    assert!(out_file.is_symlink(), "Out file is a symlink");
+    assert!(in_file.exists(), "In file does not exist");
+    assert!(out_dir.exists(), "Out dir does not exist");
+    assert!(out_file.exists(), "Out file does not exist");
+    assert!(out_file.is_symlink(), "Out file is not a symlink");
     assert_eq!(
         out_file.read_link().unwrap(),
         in_file.path(),
-        "Out file points to in file"
+        "Out file does not point to in file"
     );
 }
 
@@ -55,7 +55,7 @@ fn directory_with_file_is_removed() {
     assert_eq!(
         out_file.read_link().unwrap(),
         in_file.path(),
-        "Out file points to in file"
+        "Out file does not point to in file"
     );
 
     Command::cargo_bin(env!("CARGO_PKG_NAME"))
@@ -69,6 +69,6 @@ fn directory_with_file_is_removed() {
         .assert()
         .success();
 
-    assert!(in_file.exists(), "In file exists");
-    assert!(!out_dir.exists(), "Out dir was removed");
+    assert!(in_file.exists(), "In file does not exist");
+    assert!(!out_dir.exists(), "Out dir was not removed");
 }
