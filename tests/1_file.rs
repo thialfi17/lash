@@ -16,6 +16,7 @@ fn link_1_file_no_overwrite() {
 
     Command::cargo_bin(env!("CARGO_PKG_NAME"))
         .unwrap()
+        .current_dir(package.path())
         .args([
             "--verbose",
             "--target",
@@ -49,6 +50,7 @@ fn link_1_file() {
 
     Command::cargo_bin(env!("CARGO_PKG_NAME"))
         .unwrap()
+        .current_dir(package.path())
         .args([
             "--target",
             output.to_str().unwrap(),
@@ -78,6 +80,7 @@ fn unlink_1_file() {
 
     Command::cargo_bin(env!("CARGO_PKG_NAME"))
         .unwrap()
+        .current_dir(package.path())
         .args([
             "--target",
             output.to_str().unwrap(),
@@ -105,6 +108,7 @@ fn link_1_file_dry_run() {
 
     Command::cargo_bin(env!("CARGO_PKG_NAME"))
         .unwrap()
+        .current_dir(package.path())
         .args([
             "--dry-run",
             "--target",
@@ -135,6 +139,7 @@ fn link_1_file_adopt() {
 
     Command::cargo_bin(env!("CARGO_PKG_NAME"))
         .unwrap()
+        .current_dir(package.path())
         .args([
             "--verbose",
             "--target",
@@ -179,6 +184,7 @@ fn link_1_file_adopt_dry_run() {
 
     Command::cargo_bin(env!("CARGO_PKG_NAME"))
         .unwrap()
+        .current_dir(package.path())
         .args([
             "--verbose",
             "--dry-run",
@@ -215,6 +221,7 @@ fn unlink_1_file_dry_run() {
 
     Command::cargo_bin(env!("CARGO_PKG_NAME"))
         .unwrap()
+        .current_dir(package.path())
         .args([
             "--dry-run",
             "--target",

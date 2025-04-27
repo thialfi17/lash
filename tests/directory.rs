@@ -16,6 +16,7 @@ fn file_in_directory_created() {
 
     Command::cargo_bin(env!("CARGO_PKG_NAME"))
         .unwrap()
+        .current_dir(package.path())
         .args([
             "--target",
             output.to_str().unwrap(),
@@ -60,6 +61,7 @@ fn directory_with_file_is_removed() {
 
     Command::cargo_bin(env!("CARGO_PKG_NAME"))
         .unwrap()
+        .current_dir(package.path())
         .args([
             "--target",
             output.to_str().unwrap(),

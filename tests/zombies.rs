@@ -8,7 +8,21 @@ fn link_removes_zombie() {
     let in_file = package.child("zombie.txt");
     let out_zombie = output.child("zombie.txt");
 
-    out_zombie.symlink_to_file(in_file.path()).unwrap();
+    in_file.touch().unwrap();
+
+    Command::cargo_bin(env!("CARGO_PKG_NAME"))
+        .unwrap()
+        .current_dir(package.path())
+        .args([
+            "--target",
+            output.to_str().unwrap(),
+            "link",
+            package.to_str().unwrap(),
+        ])
+        .assert()
+        .success();
+
+    std::fs::remove_file(&in_file).unwrap();
 
     assert!(!in_file.exists(), "In file exists");
     assert!(out_zombie.is_symlink());
@@ -17,6 +31,7 @@ fn link_removes_zombie() {
 
     Command::cargo_bin(env!("CARGO_PKG_NAME"))
         .unwrap()
+        .current_dir(package.path())
         .args([
             "--target",
             output.to_str().unwrap(),
@@ -40,7 +55,21 @@ fn unlink_removes_zombie() {
     let in_file = package.child("zombie.txt");
     let out_zombie = output.child("zombie.txt");
 
-    out_zombie.symlink_to_file(in_file.path()).unwrap();
+    in_file.touch().unwrap();
+
+    Command::cargo_bin(env!("CARGO_PKG_NAME"))
+        .unwrap()
+        .current_dir(package.path())
+        .args([
+            "--target",
+            output.to_str().unwrap(),
+            "link",
+            package.to_str().unwrap(),
+        ])
+        .assert()
+        .success();
+
+    std::fs::remove_file(&in_file).unwrap();
 
     assert!(!in_file.exists(), "In file exists");
     assert!(out_zombie.is_symlink());
@@ -49,6 +78,7 @@ fn unlink_removes_zombie() {
 
     Command::cargo_bin(env!("CARGO_PKG_NAME"))
         .unwrap()
+        .current_dir(package.path())
         .args([
             "--target",
             output.to_str().unwrap(),
@@ -76,10 +106,24 @@ fn remove_zombie_dirs() {
     let out_dir = output.child("sub_dir");
     let out_zombie = out_dir.child("zombie.txt");
 
-    out_dir.create_dir_all().unwrap();
-    out_zombie.symlink_to_file(in_file.path()).unwrap();
+    in_file.touch().unwrap();
+
+    Command::cargo_bin(env!("CARGO_PKG_NAME"))
+        .unwrap()
+        .current_dir(package.path())
+        .args([
+            "--target",
+            output.to_str().unwrap(),
+            "link",
+            package.to_str().unwrap(),
+        ])
+        .assert()
+        .success();
+
+    std::fs::remove_dir_all(&in_dir).unwrap();
 
     assert!(!in_file.exists(), "In file exists");
+    assert!(!in_dir.exists(), "In dir exists");
     assert!(out_dir.exists(), "Out dir doesn't exist");
     assert!(out_zombie.is_symlink(), "Out file isn't a symlink");
     assert!(!out_zombie.exists(), "Symlink target exists");
@@ -87,6 +131,7 @@ fn remove_zombie_dirs() {
 
     Command::cargo_bin(env!("CARGO_PKG_NAME"))
         .unwrap()
+        .current_dir(package.path())
         .args([
             "--target",
             output.to_str().unwrap(),
@@ -113,6 +158,7 @@ fn dont_remove_other_empty_dirs() {
 
     Command::cargo_bin(env!("CARGO_PKG_NAME"))
         .unwrap()
+        .current_dir(package.path())
         .args([
             "--target",
             output.to_str().unwrap(),

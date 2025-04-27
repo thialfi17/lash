@@ -17,6 +17,7 @@ fn adopt_link_target_not_link() {
 
     Command::cargo_bin(env!("CARGO_PKG_NAME"))
         .unwrap()
+        .current_dir(package.path())
         .args([
             "--verbose",
             "--target",
@@ -82,6 +83,7 @@ fn dont_copy_to_from_same_file() {
 
     Command::cargo_bin(env!("CARGO_PKG_NAME"))
         .unwrap()
+        .current_dir(package.path())
         .args([
             "--verbose",
             "--target",
