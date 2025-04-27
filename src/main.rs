@@ -39,7 +39,7 @@
 //! patches!).
 
 #[allow(unused_imports)]
-use log::{debug, info, warn, error};
+use log::{debug, error, info, warn};
 
 use anyhow::Result;
 use simplelog::{ColorChoice, LevelFilter, TermLogger, TerminalMode};

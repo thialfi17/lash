@@ -50,10 +50,10 @@ fn do_link(options: &Options, link: &Link) -> Result<()> {
         info!("Processing link: {:?} -> {:?}", link.target, link.source);
         if link.target.exists() {
             if link.target.is_symlink() && link.target.read_link()? == link.source {
-                info!("Link {:?} already exists!", link.target);
+                debug!("Link {:?} already exists!", link.target);
             } else if options.adopt {
                 info!("Found a file at {:?}, adopting...", link.target);
-                debug!("Should I add a confirm/noconfirm option?");
+                // TODO: Add a confirm/noconfirm option and a y/n prompt
                 let target = link.target.canonicalize()?;
 
                 if !options.dry_run {
@@ -143,7 +143,7 @@ pub fn process_packages(
                 f(options, &link).map_err(|err| package_error(package, err))?;
             }
 
-            info!("Done processing package {:?}", package);
+            debug!("Done processing package {:?}", package);
             Ok(package.to_owned())
         })
         .collect()

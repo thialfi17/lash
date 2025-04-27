@@ -55,10 +55,11 @@ impl Options {
         let verbose = config.verbose.unwrap_or(false) | cli.verbose;
         // TODO: Why does the options enum *have* to contain a value for adopt when it's only used
         // for some operations?
-        let adopt = config.adopt.unwrap_or(false) | match cli.command {
-            crate::cli::Command::Link { adopt, .. } => adopt,
-            crate::cli::Command::Unlink { .. } => false,
-        };
+        let adopt = config.adopt.unwrap_or(false)
+            | match cli.command {
+                crate::cli::Command::Link { adopt, .. } => adopt,
+                crate::cli::Command::Unlink { .. } => false,
+            };
 
         let mut raw_target = cli.target.to_owned().or(config.target.to_owned());
         let raw_target =

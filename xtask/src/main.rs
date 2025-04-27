@@ -1,14 +1,14 @@
-use clap_complete::{shells::Shell, Generator};
 use clap::{CommandFactory, Parser, Subcommand};
+use clap_complete::{shells::Shell, Generator};
 
-use std::path::{Path, PathBuf};
-use std::io::Error;
 use std::fs::{self, File};
+use std::io::Error;
+use std::path::{Path, PathBuf};
 
 #[derive(Parser, Debug)]
 struct Cli {
     #[command(subcommand)]
-    pub command: Command
+    pub command: Command,
 }
 
 #[derive(Subcommand, Debug)]
@@ -26,14 +26,13 @@ enum Command {
     },
 }
 
-fn gen_completions(out_dir: &Path, shells: &Vec<Shell>) -> Result<(), Error>
-{
+fn gen_completions(out_dir: &Path, shells: &Vec<Shell>) -> Result<(), Error> {
     let mut cmd = lash::cli::Cli::command();
 
     fs::create_dir_all(out_dir)?;
 
     for &shell in shells {
-        let file_name =shell.file_name("lash");
+        let file_name = shell.file_name("lash");
         let mut file = File::create(out_dir.join(file_name))?;
         clap_complete::generate(shell, &mut cmd, "lash", &mut file);
     }
@@ -49,7 +48,7 @@ fn main() -> Result<(), Error> {
     match cli.command {
         Command::Completions { shells, target } => {
             gen_completions(&target, &shells)?;
-        },
+        }
     }
 
     Ok(())
