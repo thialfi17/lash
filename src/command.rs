@@ -226,7 +226,7 @@ fn check_zombies(package: &Path, target: &Path, options: &Options) -> Result<()>
     // Only needed for dry-run mode
     let mut cleaned_files: HashSet<PathBuf> = HashSet::new();
 
-    info!("Checking package {:?} for zombie links", package);
+    info!("Checking destination for dangling links to package {:?}", package);
 
     for res in WalkDir::new(target)
         .min_depth(1)
@@ -234,7 +234,7 @@ fn check_zombies(package: &Path, target: &Path, options: &Options) -> Result<()>
         .into_iter()
     {
         match res {
-            Err(e) => return Err(e.into()),
+            Err(e) => error!("Encountered error: {:?}", e),
             Ok(entry) => {
                 if entry.path_is_symlink() {
                     let link_dest = entry.path().read_link()?;
