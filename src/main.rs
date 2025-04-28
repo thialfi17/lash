@@ -45,7 +45,7 @@ use std::path::PathBuf;
 #[allow(unused_imports)]
 use log::{debug, error, info, warn};
 
-use anyhow::Result;
+use anyhow::{Result, anyhow};
 use simplelog::{ColorChoice, LevelFilter, TermLogger, TerminalMode};
 
 use crate::options::Options;
@@ -122,10 +122,14 @@ fn main() -> Result<()> {
 
     debug!("Store contents: {:?}", store);
 
+    let mut ret: Result<()> = Ok(());
     for res in command::process_packages(&options, &mut store) {
         match res {
             Ok(p) => info!("Successfully processed package {:?}", p),
-            Err((p, e)) => warn!("Failed to process package {:?} due to: {}", p, e),
+            Err((p, e)) => {
+                error!("Failed to process package {:?} due to: {}", p, e);
+                ret = Err(anyhow!("At least one package encountered an error"));
+            }
         }
     }
 
@@ -141,5 +145,5 @@ fn main() -> Result<()> {
         bincode::encode_into_std_write(&store, &mut file, config)?;
     }
 
-    Ok(())
+    ret
 }
