@@ -285,8 +285,21 @@ fn check_zombies(
             );
             match entry.try_exists() {
                 Ok(false) => {
+                    if !entry.is_symlink() {
+                        // file doesn't exist, somehow store is out of sync
+                        info!("Couldn't find link for {:?}, removing from store...", entry);
+                        keys_to_remove.insert(entry.to_path_buf());
+                        continue;
+                    }
+
                     // broken symbolic link
-                    let link_dest = entry.read_link()?;
+                    let link_dest = match entry.read_link() {
+                        Err(e) => {
+                            error!("Could not get link destination for {:?}", entry);
+                            return Err(e.into());
+                        }
+                        Ok(p) => p,
+                    };
 
                     if link_dest.starts_with(&canonicalized_package) && !link_dest.exists() {
                         info!("Removing zombie link {:?}", entry);
@@ -300,7 +313,7 @@ fn check_zombies(
                             cleaned_files.insert(entry.to_path_buf());
                         } else {
                             let res = remove_file(entry);
-                            keys_to_remove.insert(link_dest);
+                            keys_to_remove.insert(entry.to_path_buf());
                             debug!("remove_file result {:?}", res);
                         }
                     }
