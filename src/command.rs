@@ -45,8 +45,10 @@ fn do_link(options: &Options, link: &Link, store: &mut HashMap<PathBuf, PathBuf>
     if link.source.is_dir() {
         debug!("Checking required directory exists {:?}", link.target);
         if link.target.exists() {
-            // Mark it as managed
-            store.insert(link.target.to_owned(), link.source.to_owned());
+            if !options.dry_run {
+                // Mark it as managed
+                store.insert(link.target.to_owned(), link.source.to_owned());
+            }
             return Ok(());
         }
 
@@ -85,15 +87,18 @@ fn do_link(options: &Options, link: &Link, store: &mut HashMap<PathBuf, PathBuf>
     // Link exists and points to the right file
     if link.target.is_symlink() && link.target.canonicalize()? == link.source {
         debug!("Link {:?} already exists!", link.target);
-        store.insert(link.target.to_owned(), link.source.to_owned());
 
-        // Remake the link if it's a relative link and not absolute
-        if link.target.read_link()?.absolutize()? != link.target.read_link()? {
-            // TODO: Proper error handling
-            let res = remove_file(link.target.as_path());
-            debug!("remove result {:?}", res);
-            let res = symlink(link.source.as_path(), link.target.as_path());
-            debug!("symlink result {:?}", res);
+        if !options.dry_run {
+            store.insert(link.target.to_owned(), link.source.to_owned());
+
+            // Remake the link if it's a relative link and not absolute
+            if link.target.read_link()?.absolutize()? != link.target.read_link()? {
+                // TODO: Proper error handling
+                let res = remove_file(link.target.as_path());
+                debug!("remove result {:?}", res);
+                let res = symlink(link.source.as_path(), link.target.as_path());
+                debug!("symlink result {:?}", res);
+            }
         }
         return Ok(());
     }
@@ -127,6 +132,7 @@ fn do_link(options: &Options, link: &Link, store: &mut HashMap<PathBuf, PathBuf>
             // TODO: Better error handling
             let res = symlink(link.source.as_path(), link.target.as_path());
             debug!("symlink result {:?}", res);
+            store.insert(link.target.to_owned(), link.source.to_owned());
             return Ok(());
         }
     }
