@@ -6,7 +6,8 @@ use std::path::{Path, PathBuf};
 #[allow(unused_imports)]
 use log::{debug, error, info, warn};
 
-use anyhow::{Result, anyhow, bail};
+use anyhow::{Result, anyhow};
+use path_absolutize::Absolutize;
 use walkdir::WalkDir;
 
 use crate::link::Link;
@@ -42,65 +43,95 @@ fn do_unlink(options: &Options, link: &Link, store: &mut HashMap<PathBuf, PathBu
 /// or is a symlink.
 fn do_link(options: &Options, link: &Link, store: &mut HashMap<PathBuf, PathBuf>) -> Result<()> {
     if link.source.is_dir() {
-        if !link.target.exists() {
-            debug!("Making directory {:?}", link.target);
-            if !options.dry_run {
-                store.insert(link.target.to_owned(), link.source.to_owned());
-                let res = create_dir_all(link.target.as_path());
-                debug!("create_dir_all result {:?}", res);
+        debug!("Checking required directory exists {:?}", link.target);
+        if link.target.exists() {
+            // Mark it as managed
+            store.insert(link.target.to_owned(), link.source.to_owned());
+            return Ok(());
+        }
+
+        // Create directory
+        debug!("Creating missing directory {:?}", link.target);
+        if !options.dry_run {
+            match create_dir_all(link.target.as_path()) {
+                Ok(..) => {
+                    store.insert(link.target.to_owned(), link.source.to_owned());
+                }
+                Err(_) => {
+                    error!("Failed to create directory {:?}", link.target);
+                    // TODO: Should this return an error to abort or should it continue to
+                    // link as many files as possible?
+                }
             }
         }
-    } else {
-        info!("Processing link: {:?} -> {:?}", link.target, link.source);
-        if link.target.exists() {
-            if link.target.is_symlink() && link.target.read_link()? == link.source {
-                debug!("Link {:?} already exists!", link.target);
-            } else if options.adopt {
-                info!("Found a file at {:?}, adopting...", link.target);
-                // TODO: Add a confirm/noconfirm option and a y/n prompt
-                let target = link.target.canonicalize()?;
+        return Ok(());
+    }
+    // Source not a directory
 
-                if !options.dry_run {
-                    // If the target is a symlink we should take the target of the symlink unless
-                    // the target of the symlink is already the source. Attempting to copy from/to
-                    // the same file will cause the file to be truncated!
-                    let res = if target != link.source {
-                        copy(&target, link.source.as_path())
-                    } else {
-                        debug!("File was a link pointing to the owned file, skipping copy...");
-                        Ok(0)
-                    };
-                    debug!("copy result {:?}", res);
+    info!("Processing link: {:?} -> {:?}", link.target, link.source);
+    // Simple case first where no link or file exists at the target
+    if !link.target.exists() && !link.target.is_symlink() {
+        debug!("Making link {:?} -> {:?}", link.target, link.source);
+        if !options.dry_run {
+            let res = symlink(link.source.as_path(), link.target.as_path());
+            debug!("symlink result {:?}", res);
+            // TODO: Match block here
+            store.insert(link.target.to_owned(), link.source.to_owned());
+        }
+        info!("Created link {:?} -> {:?}", link.target, link.source);
+        return Ok(());
+    }
 
-                    if res.is_ok() {
-                        // But make sure to delete the symlink and not the target of the symlink!
-                        let res = remove_file(link.target.as_path());
-                        debug!("remove_file result {:?}", res);
-                    } else {
-                        bail!("Failed to adopt file");
-                    }
+    // Link exists and points to the right file
+    if link.target.is_symlink() && link.target.canonicalize()? == link.source {
+        debug!("Link {:?} already exists!", link.target);
+        store.insert(link.target.to_owned(), link.source.to_owned());
+
+        // Remake the link if it's a relative link and not absolute
+        if link.target.read_link()?.absolutize()? != link.target.read_link()? {
+            // TODO: Proper error handling
+            let res = remove_file(link.target.as_path());
+            debug!("remove result {:?}", res);
+            let res = symlink(link.source.as_path(), link.target.as_path());
+            debug!("symlink result {:?}", res);
+        }
+        return Ok(());
+    }
+
+    if options.adopt {
+        // TODO: Add a confirm/noconfirm option and a y/n prompt
+        info!("Found a file at {:?}, adopting...", link.target);
+
+        // Resolve any symlinks, when generating links we don't just generate an absolute
+        // path which doesn't follow symlinks
+        let target = link.target.canonicalize()?;
+
+        if !options.dry_run {
+            // TODO: Better error handling
+            match copy(&target, link.source.as_path()) {
+                Ok(..) => {
+                    // NOTE: Make sure to delete the target and not any potential other files pointed
+                    // to by symlink
+                    let res = remove_file(link.target.as_path());
+                    debug!("remove_file result {:?}", res);
                 }
-
-                debug!("Making link {:?} -> {:?}", link.target, link.source);
-                if !options.dry_run {
-                    let res = symlink(link.source.as_path(), link.target.as_path());
-                    store.insert(link.target.to_owned(), link.source.to_owned());
-                    debug!("symlink result {:?}", res);
+                Err(_e) => {
+                    error!("Failed to adopt file {:?}", target)
                 }
-                info!("Created link {:?} -> {:?}", link.target, link.source);
-            } else {
-                error!("Item already exists at link location! {:?}", link.target);
             }
-        } else {
-            debug!("Making link {:?} -> {:?}", link.target, link.source);
-            if !options.dry_run {
-                let res = symlink(link.source.as_path(), link.target.as_path());
-                store.insert(link.target.to_owned(), link.source.to_owned());
-                debug!("symlink result {:?}", res);
-            }
-            info!("Created link {:?} -> {:?}", link.target, link.source);
+        }
+
+        debug!("Making link {:?} -> {:?}", link.target, link.source);
+
+        if !options.dry_run {
+            // TODO: Better error handling
+            let res = symlink(link.source.as_path(), link.target.as_path());
+            debug!("symlink result {:?}", res);
+            return Ok(());
         }
     }
+
+    // File exists but is not a link to package and we're not adopting so ignore
     Ok(())
 }
 
@@ -198,9 +229,9 @@ fn get_paths(package: &Path, target: &Path, map_dots: bool, uninstall: bool) -> 
                 // Remove the current dir from the path
                 let path = comp.strip_prefix(package)?;
 
-                // Get path to link origin
+                // Get absolute path to link origin
                 let raw_target = target.join(path);
-                let raw_target = match std::path::absolute(&raw_target) {
+                let raw_target = match raw_target.absolutize() {
                     Err(e) => {
                         error!(
                             "Could not get absolute path for {:?}. Does the current directory exist?",
@@ -208,14 +239,14 @@ fn get_paths(package: &Path, target: &Path, map_dots: bool, uninstall: bool) -> 
                         );
                         return Err(e.into());
                     }
-                    Ok(p) => p.to_owned(),
+                    Ok(p) => p.into_owned(),
                 };
                 let mapped_target = match map_dots {
                     true => map_path_dots(raw_target)?,
                     false => raw_target,
                 };
 
-                // Get absolute path to file inside package
+                // Get canonical path to file inside package
                 let source = match entry.path().canonicalize() {
                     Err(e) => {
                         error!(
@@ -254,7 +285,7 @@ fn check_zombies(
         package
     );
 
-    let absolute_target = match std::path::absolute(target) {
+    let absolute_target = match target.absolutize() {
         Err(e) => {
             error!(
                 "Could not get absolute path of {:?}. Does the current directory exist?",
