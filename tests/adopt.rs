@@ -73,13 +73,21 @@ fn dont_copy_to_from_same_file() {
 
     in_file.write_binary(&original_contents).unwrap();
 
-    // Make a different link to in file that isn't detected as a link we could have generated
-    // TODO: should we be detecting any links which resolve to our source as our links anyway?
+    // Make a different link to in file that isn't the same as a link we would generate
     let mut path = std::path::PathBuf::from("../");
     path.push(package.file_name().unwrap());
     path.push(in_file.file_name().unwrap());
 
-    out_file.symlink_to_file(path).unwrap();
+    out_file.symlink_to_file(&path).unwrap();
+
+    // Check out file points to in file
+    assert!(out_file.exists(), "Out file does not exist");
+    assert!(out_file.is_symlink(), "Out file is not a symlink");
+    assert_eq!(
+        out_file.canonicalize().unwrap(),
+        in_file.path(),
+        "Out file does not point to in file"
+    );
 
     Command::cargo_bin(env!("CARGO_PKG_NAME"))
         .unwrap()
@@ -106,7 +114,7 @@ fn dont_copy_to_from_same_file() {
     assert!(out_file.exists(), "Out file does not exist");
     assert!(out_file.is_symlink(), "Out file is not a symlink");
     assert_eq!(
-        out_file.read_link().unwrap(),
+        out_file.canonicalize().unwrap(),
         in_file.path(),
         "Out file does not point to in file"
     );
