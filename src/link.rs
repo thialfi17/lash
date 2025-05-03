@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 
 /// Structure containing the source/target information for the link.
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone)]
 pub struct Link {
     /// The location of the file that the link points to
     pub source: PathBuf,
