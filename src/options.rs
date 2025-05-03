@@ -1,7 +1,6 @@
 use std::borrow::Borrow;
 use std::path::PathBuf;
 
-use anyhow::Result;
 use clap::Parser;
 
 use crate::cli::Cli;
@@ -41,16 +40,16 @@ impl Options {
     /// Parse the CLI flags and attempt to read the configuration files.
     ///
     /// Merges the outputs to generate the options that the command should be ran with.
-    pub fn new() -> Result<Self> {
+    pub fn new() -> Result<Self, config::ConfigError> {
         let cli_options = Cli::parse();
         let config_options = Config::new()?;
 
-        Self::merge(cli_options.borrow(), config_options.borrow())
+        Ok(Self::merge(cli_options.borrow(), config_options.borrow()))
     }
 
     /// Merge the options from the command line and the configuration files. All of the potential
     /// options need to have a value.
-    fn merge(cli: &Cli, config: &Config) -> Result<Self> {
+    fn merge(cli: &Cli, config: &Config) -> Self {
         let dotfiles = config.dotfiles.unwrap_or(false) | cli.dotfiles;
         let verbose = config.verbose.unwrap_or(false) | cli.verbose;
         // TODO: Why does the options enum *have* to contain a value for adopt when it's only used
@@ -68,11 +67,11 @@ impl Options {
             raw_target
                 .to_str()
                 .expect("Target couldn't be converted to a str. Is it UTF-8?"),
-        )?;
+        ).expect("Couldn't expand environment variable in target");
 
         // Can use unwrap_unchecked here for these values because we know they have to
         // have been set when using the ::from on a `Cli` value.
-        Ok(Self {
+        Self {
             dotfiles,
             dry_run: cli.dry_run,
             verbose,
@@ -86,6 +85,6 @@ impl Options {
                 crate::cli::Command::Link { packages, .. } => packages.to_owned(),
                 crate::cli::Command::Unlink { packages } => packages.to_owned(),
             },
-        })
+        }
     }
 }
