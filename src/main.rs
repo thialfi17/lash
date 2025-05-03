@@ -64,12 +64,12 @@ fn main() -> Result<()> {
         false => LevelFilter::Info,
     };
 
-    let _ = TermLogger::init(
+    TermLogger::init(
         log_level,
         simplelog::Config::default(),
         TerminalMode::Mixed,
         ColorChoice::Auto,
-    );
+    )?;
 
     debug!("{:?}", options);
 
