@@ -70,8 +70,6 @@ impl Options {
                 .expect("Target couldn't be converted to a str. Is it UTF-8?"),
         )?;
 
-        // Can use unwrap_unchecked here for these values because we know they have to
-        // have been set when using the ::from on a `Cli` value.
         Ok(Self {
             dotfiles,
             dry_run: cli.dry_run,
