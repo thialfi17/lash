@@ -310,57 +310,57 @@ fn check_zombies(
     };
 
     let mut keys_to_remove: HashSet<PathBuf> = HashSet::new();
-    for entry in store.keys().filter(|i| i.starts_with(&absolute_target)) {
-        if store
-            .get(entry)
-            .unwrap()
-            .starts_with(&canonicalized_package)
-        {
-            debug!(
-                "Store entry found for this package+target: {:?}",
-                store.get(entry).unwrap()
-            );
-            match entry.try_exists() {
-                Ok(false) => {
-                    if !entry.is_symlink() {
-                        // file doesn't exist, somehow store is out of sync
-                        info!("Couldn't find link for {:?}, removing from store...", entry);
-                        keys_to_remove.insert(entry.to_path_buf());
-                        continue;
+    for (target, _source) in store
+        .iter()
+        .filter(|(t, s)| t.starts_with(&absolute_target) && s.starts_with(&canonicalized_package))
+    {
+        debug!(
+            "Store entry found for this package+target: {:?}",
+            store.get(target).unwrap()
+        );
+        match target.try_exists() {
+            Ok(false) => {
+                if !target.is_symlink() {
+                    // file doesn't exist, somehow store is out of sync
+                    info!(
+                        "Couldn't find link for {:?}, removing from store...",
+                        target
+                    );
+                    keys_to_remove.insert(target.to_path_buf());
+                    continue;
+                }
+
+                // broken symbolic link
+                let link_dest = match target.read_link() {
+                    Err(e) => {
+                        error!("Could not get link destination for {:?}", target);
+                        return Err(e.into());
                     }
+                    Ok(p) => p,
+                };
 
-                    // broken symbolic link
-                    let link_dest = match entry.read_link() {
-                        Err(e) => {
-                            error!("Could not get link destination for {:?}", entry);
-                            return Err(e.into());
-                        }
-                        Ok(p) => p,
-                    };
-
-                    if link_dest.starts_with(&canonicalized_package) && !link_dest.exists() {
-                        info!("Removing zombie link {:?}", entry);
-                        if let Some(parent) = entry.parent() {
-                            if !clean_dirh.contains(parent) {
-                                clean_dirq.push_back(parent.to_path_buf());
-                                clean_dirh.insert(parent.to_path_buf());
-                            }
-                        }
-                        if options.dry_run {
-                            cleaned_files.insert(entry.to_path_buf());
-                        } else {
-                            let res = remove_file(entry);
-                            keys_to_remove.insert(entry.to_path_buf());
-                            debug!("remove_file result {:?}", res);
+                if link_dest.starts_with(&canonicalized_package) && !link_dest.exists() {
+                    info!("Removing zombie link {:?}", target);
+                    if let Some(parent) = target.parent() {
+                        if !clean_dirh.contains(parent) {
+                            clean_dirq.push_back(parent.to_path_buf());
+                            clean_dirh.insert(parent.to_path_buf());
                         }
                     }
+                    if options.dry_run {
+                        cleaned_files.insert(target.to_path_buf());
+                    } else {
+                        let res = remove_file(target);
+                        keys_to_remove.insert(target.to_path_buf());
+                        debug!("remove_file result {:?}", res);
+                    }
                 }
-                Ok(true) => { // dir/target exists so nothing to do
-                }
-                Err(e) => {
-                    error!("Could not check if {:?} exists.", entry);
-                    return Err(e.into());
-                }
+            }
+            Ok(true) => { // dir/target exists so nothing to do
+            }
+            Err(e) => {
+                error!("Could not check if {:?} exists.", target);
+                return Err(e.into());
             }
         }
     }
