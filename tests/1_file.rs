@@ -69,6 +69,122 @@ fn link_1_file() {
 }
 
 #[test]
+/// For now make sure we don't change anything if there is an intermediate link that eventually
+/// resolves to the correct file. This can avoid leaving unneeded links lying around on the
+/// filesystem.
+///
+/// TODO: Is this behaviour necessary and should it have a test i.e should it be codified?
+fn link_1_file_nested_symlinks() {
+    let package = assert_fs::TempDir::new().unwrap();
+    let output = assert_fs::TempDir::new().unwrap();
+    let in_file = package.child("file.txt");
+    let out_file = output.child("file.txt");
+    let mid_file = output.child("mid");
+
+    in_file.touch().unwrap();
+    mid_file.symlink_to_file(&in_file).unwrap();
+    out_file.symlink_to_file(&mid_file).unwrap();
+
+    Command::cargo_bin(env!("CARGO_PKG_NAME"))
+        .unwrap()
+        .current_dir(package.path())
+        .args([
+            "--target",
+            output.to_str().unwrap(),
+            "link",
+            package.to_str().unwrap(),
+        ])
+        .assert()
+        // Should succeed because output still links into package
+        .success();
+
+    assert!(in_file.exists(), "In file doesn't exist");
+    assert!(out_file.exists(), "Out file doesn't exist");
+    assert!(out_file.is_symlink(), "Out file isn't a symlink");
+    assert!(mid_file.is_symlink(), "Mid file isn't a symlink");
+    assert_eq!(
+        out_file.read_link().unwrap(),
+        mid_file.path(),
+        "out file doesn't point to mid file"
+    );
+    assert_eq!(
+        mid_file.read_link().unwrap(),
+        in_file.path(),
+        "mid file doesn't point to in file"
+    );
+
+    package.close().unwrap();
+    output.close().unwrap();
+}
+
+#[test]
+/// Test that relative symlinks are converted to absolute paths
+fn link_1_file_relative_symlinks() {
+    let package = assert_fs::TempDir::new().unwrap();
+    let output = assert_fs::TempDir::new().unwrap();
+    let in_file = package.child("file.txt");
+    let out_file = output.child("file.txt");
+
+    in_file.touch().unwrap();
+
+    let mut relative_path = std::ffi::OsString::from("/.");
+    relative_path.push(in_file.as_os_str());
+
+    out_file.symlink_to_file(relative_path).unwrap();
+
+    assert_ne!(
+        out_file.read_link().unwrap().as_os_str(),
+        out_file
+            .read_link()
+            .unwrap()
+            .canonicalize()
+            .unwrap()
+            .as_os_str(),
+        "out file is already an absolute link"
+    );
+    assert_eq!(
+        out_file.read_link().unwrap().canonicalize().unwrap(),
+        in_file.path(),
+        "out file doesn't point to in file"
+    );
+
+    Command::cargo_bin(env!("CARGO_PKG_NAME"))
+        .unwrap()
+        .current_dir(package.path())
+        .args([
+            "--target",
+            output.to_str().unwrap(),
+            "link",
+            package.to_str().unwrap(),
+        ])
+        .assert()
+        // Should succeed because output still links into package
+        .success();
+
+    assert!(in_file.exists(), "In file doesn't exist");
+    assert!(out_file.exists(), "Out file doesn't exist");
+    assert!(out_file.is_symlink(), "Out file isn't a symlink");
+    assert_eq!(
+        out_file.read_link().unwrap(),
+        in_file.path(),
+        "out file doesn't point to in file"
+    );
+    assert_eq!(
+        out_file.read_link().unwrap().as_os_str(),
+        out_file
+            .read_link()
+            .unwrap()
+            .canonicalize()
+            .unwrap()
+            .as_os_str(),
+        "out file is not an absolute link"
+    );
+
+    package.close().unwrap();
+    output.close().unwrap();
+}
+
+#[test]
 fn unlink_1_file() {
     let package = assert_fs::TempDir::new().unwrap();
     let output = assert_fs::TempDir::new().unwrap();

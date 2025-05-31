@@ -92,7 +92,11 @@ fn do_link(options: &Options, link: &Link, store: &mut HashMap<PathBuf, PathBuf>
             store.insert(link.target.to_owned(), link.source.to_owned());
 
             // Remake the link if it's a relative link and not absolute
-            if link.target.read_link()?.absolutize()? != link.target.read_link()? {
+            // NOTE: Need to compare the str version because Paths will automatically resolve
+            // the relative paths to make them equivalent.
+            if link.target.read_link()?.as_os_str()
+                != link.target.read_link()?.absolutize()?.as_os_str()
+            {
                 // TODO: Proper error handling
                 let res = remove_file(link.target.as_path());
                 debug!("remove result {:?}", res);
